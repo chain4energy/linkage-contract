@@ -11,4 +11,7 @@ pub enum ContractError {
 
     #[error("Unauthorized contract error")]
     UnauthorizedContractError,
+
+    #[error("Not found error")]
+    NotFoundContractError,
 }

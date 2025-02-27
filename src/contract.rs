@@ -1,10 +1,7 @@
 use crate::error::ContractError;
 use crate::responses::{MessageResponse, NftLockEntryResponse};
 use cosmwasm_std::Order::Ascending;
-use cosmwasm_std::{
-    to_json_binary, to_json_string, Addr, Binary, Response, StdResult, SubMsg,
-    SubMsgResult, WasmMsg,
-};
+use cosmwasm_std::{to_json_binary, to_json_string, Addr, Binary, Order, Response, StdResult, SubMsg, SubMsgResult, WasmMsg};
 use cw_storage_plus::{Item, Map};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -89,6 +86,28 @@ impl LinkageContract {
             }),
             Err(e) => Err(ContractError::LinkageContractError(e)),
         }
+    }
+
+    // TODO: test
+    #[sv::msg(query)]
+    pub fn get_locked_nft_by_did(&self, ctx: QueryCtx, did: String) -> Result<NftLockEntryResponse, ContractError> {
+        let mut keys: Vec<String> = self.locked_nfts
+            .range(ctx.deps.storage, None, None, Ascending)
+            .filter_map(|item| {
+                match item {
+                    Ok((key, entry)) if entry.did.eq(&did) => Some(key),
+                    _ => None
+                }
+            }).collect();
+        let token_id = keys.pop().ok_or_else(|| ContractError::NotFoundContractError)?;
+        let entry = self.locked_nfts
+            .load(ctx.deps.storage, token_id.clone())
+            .map_err(|_| ContractError::NotFoundContractError)?;
+        Ok(NftLockEntryResponse {
+            token_id: token_id,
+            sender: entry.sender,
+            did: entry.did,
+        })
     }
 
     #[sv::msg(exec)]
