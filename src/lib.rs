@@ -1,6 +1,7 @@
 pub mod contract;
 mod responses;
 mod error;
+mod state;
 
 pub fn add(left: usize, right: usize) -> usize {
     left + right

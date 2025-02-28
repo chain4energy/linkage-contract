@@ -1,3 +1,5 @@
+use std::string::FromUtf8Error;
+
 use cosmwasm_std::StdError;
 use thiserror::Error;
 
@@ -9,9 +11,33 @@ pub enum ContractError {
     #[error("Linkage contract error")]
     LinkageContractError(StdError),
 
+    #[error("Not found")]
+    NotFound,
+
+    #[error("Unauthorized")]
+    Unauthorized(),
+
     #[error("Unauthorized contract error")]
     UnauthorizedContractError,
 
     #[error("Not found error")]
     NotFoundContractError,
+
+    #[error("Admin not found")]
+    AdminNotFound(),
+
+    #[error("Admin already exists")]
+    AdminAlreadyExists(),
+
+    #[error("Nft Contract not found")]
+    NftContractNotFound(),
+
+    #[error("Nft Contract already exists")]
+    NftContractAlreadyExists(),
+
+    #[error("Did Invalid")]
+    DidInvalid(FromUtf8Error),
+
+    #[error("Did Invalid")]
+    AlreadyExists,
 }
