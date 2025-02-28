@@ -250,7 +250,7 @@ impl LinkageContract {
         }
     }
 
-    #[sv::msg(reply)]
+    #[sv::msg(reply)] // TODO verify if needed
     fn reply(
         &self,
         _ctx: ReplyCtx,
