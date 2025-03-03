@@ -123,7 +123,7 @@ impl LinkageContract {
         self.ensure_unique_nft_contract_addr(&authorized_nft_contracts, &nft_contract_address)?;
 
         authorized_nft_contracts.push(nft_contract_address.clone());
-        self.save_admins(ctx.deps.storage, &authorized_nft_contracts)?;
+        self.save_authorized_nft_contracts(ctx.deps.storage, &authorized_nft_contracts)?;
 
         let event = Event::new("add_authorized_nft_contract")
             .add_attribute("executor", ctx.info.sender.to_string())
@@ -146,7 +146,7 @@ impl LinkageContract {
 
         if let Some(pos) = authorized_nft_contracts.iter().position(|x| x == &nft_contract_address) {
             authorized_nft_contracts.remove(pos);
-            self.save_admins(ctx.deps.storage, &authorized_nft_contracts)?;
+            self.save_authorized_nft_contracts(ctx.deps.storage, &authorized_nft_contracts)?;
 
             let event = Event::new("remove_authorized_nft_contract")
             .add_attribute("executor", ctx.info.sender.to_string())
@@ -591,6 +591,8 @@ impl LinkageContract {
     }
 }
 
+
+//  TODO add events values checking in tests
 #[cfg(test)]
 mod tests {
     use crate::contract::sv::mt::{CodeId, LinkageContractProxy};
@@ -600,6 +602,267 @@ mod tests {
     use cw721::{Cw721ExecuteMsg, Cw721QueryMsg};
     use cw_multi_test::{Contract, ContractWrapper, Executor, IntoAddr};
     use sylvia::multitest::App;
+
+    // -------------------- Admin tests 
+    #[test]
+    fn test_add_admin() {
+        let app = App::default();
+        let code_id = CodeId::store_code(&app);
+
+        let owner = "owner".into_addr();
+
+        let auth_address = "cw721_address".into_addr();
+
+        let contract = code_id
+            .instantiate(vec![owner.clone()], vec![auth_address.clone()])
+            .call(&owner)
+            .unwrap();
+
+        let admin1 = "admin1".into_addr();
+
+        let res = contract
+            .add_admin(admin1.to_string()).call(&owner).expect("error adding admin");
+
+        assert_eq!(res.events[0].ty, "execute");
+        assert_eq!(res.events[0].attributes[0].key, "_contract_address");
+        assert_eq!(res.events[0].attributes[0].value, contract.contract_addr.to_string());
+        
+        assert_eq!(res.events[1].ty, "wasm");
+        assert_eq!(res.events[1].attributes[0].key, "_contract_address");
+        assert_eq!(res.events[1].attributes[0].value, contract.contract_addr.to_string());
+        assert_eq!(res.events[1].attributes[1].key, "action");
+        assert_eq!(res.events[1].attributes[1].value, "add_admin");
+        assert_eq!(res.events[1].attributes[2].key, "new_admin");
+        assert_eq!(res.events[1].attributes[2].value, admin1.to_string());
+
+        assert_eq!(res.events[2].ty, "wasm-add_admin");
+        assert_eq!(res.events[2].attributes[0].key, "_contract_address");
+        assert_eq!(res.events[2].attributes[0].value, contract.contract_addr.to_string());
+        assert_eq!(res.events[2].attributes[1].key, "executor");
+        assert_eq!(res.events[2].attributes[1].value, owner.to_string());
+        assert_eq!(res.events[2].attributes[2].key, "new_admin");
+        assert_eq!(res.events[2].attributes[2].value, admin1.to_string());
+
+        let non_admin1 = "non_admin".into_addr();
+        let admin2 = "admin2".into_addr();
+        let res = contract
+            .add_admin(admin2.to_string()).call(&non_admin1);
+
+        assert!(res.is_err(), "Expected Err, but got an Ok");
+        assert_eq!("Unauthorized", res.err().unwrap().to_string());
+
+        let admin3 = "admin3".into_addr();
+
+        contract
+            .add_admin(admin3.to_string()).call(&owner).expect("error adding admin3");
+    }
+
+    #[test]
+    fn test_remove_admin() {
+        let app = App::default();
+        let code_id = CodeId::store_code(&app);
+
+        let owner = "owner".into_addr();
+
+        let auth_address = "cw721_address".into_addr();
+
+        let contract = code_id
+            .instantiate(vec![owner.clone()], vec![auth_address.clone()])
+            .call(&owner)
+            .unwrap();
+        let admin1 = "admin1".into_addr();
+    
+        // First, add an admin to remove later
+        contract
+            .add_admin(admin1.to_string()).call(&owner).expect("error adding admin1");
+    
+        // Remove the admin
+        let res = contract
+            .remove_admin(admin1.to_string()).call(&owner).expect("error removing admin");
+    
+        // Validate the response attributes and events
+        assert_eq!(res.events[0].ty, "execute");
+        assert_eq!(res.events[0].attributes[0].key, "_contract_address");
+        assert_eq!(res.events[0].attributes[0].value, contract.contract_addr.to_string());
+    
+        assert_eq!(res.events[1].ty, "wasm");
+        assert_eq!(res.events[1].attributes[0].key, "_contract_address");
+        assert_eq!(res.events[1].attributes[0].value, contract.contract_addr.to_string());
+        assert_eq!(res.events[1].attributes[1].key, "action");
+        assert_eq!(res.events[1].attributes[1].value, "remove_admin");
+        assert_eq!(res.events[1].attributes[2].key, "removed_admin");
+        assert_eq!(res.events[1].attributes[2].value, admin1.to_string());
+    
+        // Test removing a non-existing admin
+        let non_admin = "non_admin".into_addr();
+        let res = contract
+            .remove_admin(non_admin.to_string()).call(&owner);
+        
+        assert!(res.is_err(), "Expected Err, but got an Ok");
+        assert_eq!("Admin not found", res.err().unwrap().to_string());
+    
+        // Test unauthorized removal attempt
+        let unauthorized_user = "unauthorized".into_addr();
+        let another_admin = "admin2".into_addr();
+        
+        // Add a second admin to test unauthorized removal
+        contract
+            .add_admin(another_admin.to_string()).call(&owner).expect("error adding admin2");
+    
+        let res = contract
+            .remove_admin(another_admin.to_string()).call(&unauthorized_user);
+    
+        assert!(res.is_err(), "Expected Err, but got an Ok");
+        assert_eq!("Unauthorized", res.err().unwrap().to_string());
+    }
+
+    #[test]
+    fn test_get_admins() {
+        let app = App::default();
+        let code_id = CodeId::store_code(&app);
+    
+        let owner = "owner".into_addr();
+        let admin1 = "admin1".into_addr();
+        let admin2 = "admin2".into_addr();
+    
+        let auth_address = "cw721_address".into_addr();
+    
+        // Instantiate contract with an initial admin
+        let contract = code_id
+            .instantiate(vec![admin1.clone()], vec![auth_address.clone()])
+            .call(&owner)
+            .unwrap();
+    
+        // Check initial admins
+        let result = contract.get_admins();
+        assert!(result.is_ok(), "Expected Ok, but got an Err");
+        let admins = result.unwrap();
+        assert_eq!(admins.len(), 1);
+        assert_eq!(admins[0], admin1);
+    
+        // Add a second admin
+        contract.add_admin(admin2.to_string()).call(&admin1).expect("error adding admin");
+        
+        let result = contract.get_admins();
+        assert!(result.is_ok(), "Expected Ok, but got an Err");
+        let admins = result.unwrap();
+        assert_eq!(admins.len(), 2);
+        assert!(admins.contains(&admin1));
+        assert!(admins.contains(&admin2));
+    
+        // Remove the first admin
+        contract.remove_admin(admin1.to_string()).call(&admin1).expect("error removing admin");
+        
+        let result = contract.get_admins();
+        assert!(result.is_ok(), "Expected Ok, but got an Err");
+        let admins = result.unwrap();
+        assert_eq!(admins.len(), 1);
+        assert!(admins.contains(&admin2));
+        assert!(!admins.contains(&admin1));
+    }
+
+    #[test]
+    fn test_add_authorized_nft_contract() {
+        let app = App::default();
+        let code_id = CodeId::store_code(&app);
+
+        let owner = "owner".into_addr();
+        let auth_address = "cw721_address".into_addr();
+        let contract = code_id
+            .instantiate(vec![owner.clone()], vec![auth_address.clone()])
+            .call(&owner)
+            .unwrap();
+
+        let new_nft_contract = "new_nft_contract".into_addr();
+
+        // Successfully add a new authorized NFT contract
+        let res = contract.add_authorized_nft_contract(new_nft_contract.clone()).call(&owner);
+        assert!(res.is_ok(), "Expected Ok, but got an Err");
+
+        let res = res.unwrap();
+        assert_eq!(res.events[0].ty, "execute");
+        assert_eq!(res.events[0].attributes[0].key, "_contract_address");
+        assert_eq!(res.events[0].attributes[0].value, contract.contract_addr.to_string());
+
+        assert_eq!(res.events[1].ty, "wasm");
+        assert_eq!(res.events[1].attributes[0].key, "_contract_address");
+        assert_eq!(res.events[1].attributes[0].value, contract.contract_addr.to_string());
+        assert_eq!(res.events[1].attributes[1].key, "action");
+        assert_eq!(res.events[1].attributes[1].value, "add_authorized_nft_contract");
+        assert_eq!(res.events[1].attributes[2].key, "new_authorized_nft_contract");
+        assert_eq!(res.events[1].attributes[2].value, new_nft_contract.to_string());
+
+        assert_eq!(res.events[2].ty, "wasm-add_authorized_nft_contract");
+        assert_eq!(res.events[2].attributes[0].key, "_contract_address");
+        assert_eq!(res.events[2].attributes[0].value, contract.contract_addr.to_string());
+        assert_eq!(res.events[2].attributes[1].key, "executor");
+        assert_eq!(res.events[2].attributes[1].value, owner.to_string());
+        assert_eq!(res.events[2].attributes[2].key, "new_authorized_nft_contract");
+        assert_eq!(res.events[2].attributes[2].value, new_nft_contract.to_string());
+
+
+        // Ensure it was added correctly
+        let result = contract.get_authorized_nft_contracts();
+        assert!(result.is_ok(), "Expected Ok, but got an Err");
+        let authorized_contracts = result.unwrap();
+        assert_eq!(authorized_contracts.len(), 2);
+        assert!(authorized_contracts.contains(&new_nft_contract));
+
+        // Try adding the same contract again (should fail)
+        let res = contract.add_authorized_nft_contract(new_nft_contract.clone()).call(&owner);
+        assert!(res.is_err(), "Expected Err, but got Ok");
+        assert_eq!("NFT contract already exists", res.err().unwrap().to_string());
+
+        // Unauthorized user should not be able to add a contract
+        let unauthorized_user = "unauthorized_user".into_addr();
+        let another_nft_contract = "another_nft_contract".into_addr();
+        let res = contract.add_authorized_nft_contract(another_nft_contract.clone()).call(&unauthorized_user);
+        assert!(res.is_err(), "Expected Err, but got Ok");
+        assert_eq!("Unauthorized", res.err().unwrap().to_string());
+    }
+
+    #[test]
+    fn test_remove_authorized_nft_contract() {
+        let app = App::default();
+        let code_id = CodeId::store_code(&app);
+
+        let owner = "owner".into_addr();
+        let auth_address = "cw721_address".into_addr();
+        let contract = code_id
+            .instantiate(vec![owner.clone()], vec![auth_address.clone()])
+            .call(&owner)
+            .unwrap();
+
+        // Remove existing authorized contract
+        let res = contract.remove_authorized_nft_contract(auth_address.clone()).call(&owner);
+        assert!(res.is_ok(), "Expected Ok, but got an Err");
+
+        // Verify emitted events
+        let res = res.unwrap();
+        assert_eq!(res.events[0].ty, "execute");
+        assert_eq!(res.events[1].ty, "wasm");
+        assert_eq!(res.events[1].attributes[1].key, "action");
+        assert_eq!(res.events[1].attributes[1].value, "remove_authorized_nft_contract");
+        assert_eq!(res.events[1].attributes[2].key, "removed_authorized_nft_contract");
+        assert_eq!(res.events[1].attributes[2].value, auth_address.to_string());
+
+        // Ensure contract was removed
+        let result = contract.get_authorized_nft_contracts();
+        assert!(result.is_ok(), "Expected Ok, but got an Err");
+        let authorized_contracts = result.unwrap();
+        assert!(!authorized_contracts.contains(&auth_address));
+
+        // Try removing a non-existing contract (should fail)
+        let res = contract.remove_authorized_nft_contract(auth_address.clone()).call(&owner);
+        assert!(res.is_err(), "Expected Err, but got Ok");
+        assert_eq!("Admin not found", res.err().unwrap().to_string());
+
+        // Unauthorized user should not be able to remove a contract
+        let unauthorized_user = "unauthorized_user".into_addr();
+        let res = contract.remove_authorized_nft_contract(auth_address.clone()).call(&unauthorized_user);
+        assert!(res.is_err(), "Expected Err, but got Ok");
+        assert_eq!("Unauthorized", res.err().unwrap().to_string());
+    }
 
     #[test]
     fn instantiate_and_get_authorized_contract() {

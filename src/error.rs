@@ -29,10 +29,10 @@ pub enum ContractError {
     #[error("Admin already exists")]
     AdminAlreadyExists(),
 
-    #[error("Nft Contract not found")]
+    #[error("NFT contract not found")]
     NftContractNotFound(),
 
-    #[error("Nft Contract already exists")]
+    #[error("NFT contract already exists")]
     NftContractAlreadyExists(),
 
     #[error("Did Invalid")]
