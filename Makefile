@@ -27,17 +27,16 @@ DOCKER_DIR := ./.docker
 DOCKER_FILE := $(DOCKER_DIR)/Dockerfile
 
 # Task to check if the file exists, and if not, do something
-
 build-c4e-chain-docker:
 	@if [ ! -f $(DOCKER_FILE) ]; then \
 		echo "File $(DOCKER_FILE) does not exist, cloning repository..."; \
 		-rm -rf $(DOCKER_DIR); \
 		mkdir -p $(DOCKER_DIR); \
-		git clone --branch v1.4.3.0 --depth 1 http://gitlab.sce-ovoo.pl/c4e/chain/test/e2e-contract-test/c4e-chain-e2e-test-docker.git ./.docker; \
+			git clone --branch v1.4.4.0 --depth 1 http://gitlab.sce-ovoo.pl/c4e/chain/test/e2e-contract-test/c4e-chain-e2e-test-docker.git ./.docker; \
 	else \
 		echo "File $(DOCKER_FILE) already exists."; \
 	fi
-	docker build -t c4e-chain-e2e-test:v1.4.3 ./.docker
+	docker build -t c4e-chain-linkage:v1.4.4 ./.docker
 
 clean-dockerfile:
 	-rm -rf $(DOCKER_DIR)
@@ -65,22 +64,22 @@ prepare_chain:
 clean_prepare_chain:
 	-rm -r ${E2E_TEST_RUN_PATH}
 
-DOCKER_GROUP=did-contract
+DOCKER_GROUP=linkage-contract
 
 run_chain:
-	-docker network create did
-	docker run --name chain-node-did-1 -d --user $$(id -u):$$(id -g) -v ./${E2E_TEST_RUN_PATH}/node1/:/chain4energy/.c4e-chain/ --network did --label com.docker.compose.project=${DOCKER_GROUP} -p 31657:26657 --rm c4e-chain-did:v1.4.3 
-	docker run --name chain-node-did-2 -d --user $$(id -u):$$(id -g) -v ./${E2E_TEST_RUN_PATH}/node2/:/chain4energy/.c4e-chain/ --network did --label com.docker.compose.project=${DOCKER_GROUP} --rm c4e-chain-did:v1.4.3
-	docker run --name chain-node-did-3 -d --user $$(id -u):$$(id -g) -v ./${E2E_TEST_RUN_PATH}/node3/:/chain4energy/.c4e-chain/ --network did --label com.docker.compose.project=${DOCKER_GROUP} --rm c4e-chain-did:v1.4.3
-	docker run --name chain-node-did-4 -d --user $$(id -u):$$(id -g) -v ./${E2E_TEST_RUN_PATH}/node4/:/chain4energy/.c4e-chain/ --network did --label com.docker.compose.project=${DOCKER_GROUP} --rm c4e-chain-did:v1.4.3
+	-docker network create linkage
+	docker run --name chain-node-linkage-1 -d --user $$(id -u):$$(id -g) -v ./${E2E_TEST_RUN_PATH}/node1/:/chain4energy/.c4e-chain/ --network linkage --label com.docker.compose.project=${DOCKER_GROUP} -p 31657:26657 --rm c4e-chain-linkage:v1.4.4 
+	docker run --name chain-node-linkage-2 -d --user $$(id -u):$$(id -g) -v ./${E2E_TEST_RUN_PATH}/node2/:/chain4energy/.c4e-chain/ --network linkage --label com.docker.compose.project=${DOCKER_GROUP} --rm c4e-chain-linkage:v1.4.4
+	docker run --name chain-node-linkage-3 -d --user $$(id -u):$$(id -g) -v ./${E2E_TEST_RUN_PATH}/node3/:/chain4energy/.c4e-chain/ --network linkage --label com.docker.compose.project=${DOCKER_GROUP} --rm c4e-chain-linkage:v1.4.4
+	docker run --name chain-node-linkage-4 -d --user $$(id -u):$$(id -g) -v ./${E2E_TEST_RUN_PATH}/node4/:/chain4energy/.c4e-chain/ --network linkage --label com.docker.compose.project=${DOCKER_GROUP} --rm c4e-chain-linkage:v1.4.4
 
 stop_chain:
 	@echo "Stopping all containers with label com.docker.compose.project=${DOCKER_GROUP}"
 	docker ps -q --filter "label=com.docker.compose.project=${DOCKER_GROUP}" | xargs -r docker stop
 	@echo "Removing all containers with label com.docker.compose.project=${DOCKER_GROUP}"
 	docker ps -a -q --filter "label=com.docker.compose.project=${DOCKER_GROUP}" | xargs -r docker rm
-	@echo "Removing the did network"
-	-docker network rm did
+	@echo "Removing the linkage network"
+	-docker network rm linkage
 
 _replace:
 	@echo "Replacing according to ${REPLACE_FILE}"
