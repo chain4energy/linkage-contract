@@ -8,8 +8,17 @@ pub enum ContractError {
     #[error("{0}")]
     Std(#[from] StdError),
 
-    #[error("Linkage contract error")]
+    #[error("Linkage contract error: {0}")]
     LinkageContractError(StdError),
+
+    #[error("Storage error: {0}: {1}")]
+    StorageError(String, StdError),
+
+    #[error("Invalid admin address: {0}")]
+    InvalidAdminAddress(StdError),
+
+    #[error("Invalid conract address: {0}")]
+    InvalidContractAddress(StdError),
 
     #[error("Not found")]
     NotFound,
@@ -38,6 +47,9 @@ pub enum ContractError {
     #[error("Did Invalid")]
     DidInvalid(FromUtf8Error),
 
-    #[error("Did Invalid")]
-    AlreadyExists,
+    #[error("AlreadyExists: {0}")]
+    AlreadyExists(String),
+
+    #[error("At least one contract admin is required")]
+    NoAdmin,
 }

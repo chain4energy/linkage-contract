@@ -1,8 +1,11 @@
 use crate::error::ContractError;
-use crate::responses::{NftLockEntryResponse};
-use crate::state::{NftLockEntry, Nft};
+use crate::responses::NftLockEntryResponse;
+use crate::state::{Nft, NftLockEntry};
 use cosmwasm_std::Order::Ascending;
-use cosmwasm_std::{to_json_binary, to_json_string, Addr, Api, Binary, Deps, Event, Order, Response, StdResult, Storage, SubMsg, SubMsgResult, WasmMsg};
+use cosmwasm_std::{
+    to_json_binary, to_json_string, Addr, Api, Binary, Deps, Event, Order, Response, StdResult,
+    Storage, SubMsg, SubMsgResult, WasmMsg,
+};
 use cw_storage_plus::{Item, Map};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -17,21 +20,20 @@ pub struct LinkageContract {
     pub nfts_by_did: Map<String, Vec<Nft>>,
 }
 
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)] 
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
-pub struct TransferNftMsg { // TODO use nft contract api
+pub struct TransferNftMsg {
+    // TODO use nft contract api
     recipient: String,
     token_id: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
-pub struct Cw721ExecuteMsg { // TODO use nft contract api
+pub struct Cw721ExecuteMsg {
+    // TODO use nft contract api
     transfer_nft: TransferNftMsg,
 }
-
-
 
 #[entry_points]
 #[contract]
@@ -49,7 +51,13 @@ impl LinkageContract {
     }
 
     #[sv::msg(instantiate)]
-    pub fn instantiate(&self, ctx: InstantiateCtx, admins: Vec<Addr>, authorized_nft_contracts: Vec<Addr>) -> Result<Response, ContractError> {
+    pub fn instantiate(
+        &self,
+        ctx: InstantiateCtx,
+        admins: Vec<Addr>,
+        authorized_nft_contracts: Vec<Addr>,
+    ) -> Result<Response, ContractError> {
+        self.ensure_one_admin(&admins)?;
         self.save_admins(ctx.deps.storage, &admins)?;
         self.save_authorized_nft_contracts(ctx.deps.storage, &authorized_nft_contracts)?;
         Ok(Response::default())
@@ -61,8 +69,8 @@ impl LinkageContract {
     pub fn add_admin(&self, ctx: ExecCtx, new_admin: String) -> Result<Response, ContractError> {
         self.authorize_admin(ctx.deps.as_ref(), &ctx.info.sender)?;
 
-        let new_admin = self.ensure_valid_admin(ctx.deps.api, new_admin)?;
-        
+        let new_admin = self.ensure_valid_admin(ctx.deps.api, &new_admin)?;
+
         let mut admins: Vec<Addr> = self.admins.load(ctx.deps.storage)?;
         self.ensure_unique_admins(&admins, &new_admin)?;
 
@@ -79,22 +87,26 @@ impl LinkageContract {
             .add_event(event))
     }
 
-
     #[sv::msg(exec)]
-    pub fn remove_admin(&self, ctx: ExecCtx, admin_to_remove: String) -> Result<Response, ContractError> {
+    pub fn remove_admin(
+        &self,
+        ctx: ExecCtx,
+        admin_to_remove: String,
+    ) -> Result<Response, ContractError> {
         self.authorize_admin(ctx.deps.as_ref(), &ctx.info.sender)?;
 
-        let admin = self.ensure_valid_admin(ctx.deps.api, admin_to_remove)?;
+        let admin = self.ensure_valid_admin(ctx.deps.api, &admin_to_remove)?;
 
         let mut admins = self.admins.load(ctx.deps.storage)?;
 
         if let Some(pos) = admins.iter().position(|x| x == &admin) {
             admins.remove(pos);
+            self.ensure_one_admin(&admins)?;
             self.save_admins(ctx.deps.storage, &admins)?;
 
             let event = Event::new("remove_admin")
-            .add_attribute("executor", ctx.info.sender.to_string())
-            .add_attribute("removed_admin", admin.to_string());
+                .add_attribute("executor", ctx.info.sender.to_string())
+                .add_attribute("removed_admin", admin.to_string());
 
             Ok(Response::new()
                 .add_attribute("action", "remove_admin")
@@ -114,12 +126,17 @@ impl LinkageContract {
     // ---- Authorized NFT Contracts ------
 
     #[sv::msg(exec)]
-    pub fn add_authorized_nft_contract(&self, ctx: ExecCtx, nft_contract_address: Addr) -> Result<Response, ContractError> {
+    pub fn add_authorized_nft_contract(
+        &self,
+        ctx: ExecCtx,
+        nft_contract_address: Addr,
+    ) -> Result<Response, ContractError> {
         self.authorize_admin(ctx.deps.as_ref(), &ctx.info.sender)?;
 
         self.ensure_valid_contract_addr(ctx.deps.api, &nft_contract_address)?;
-        
-        let mut authorized_nft_contracts: Vec<Addr> = self.authorized_nft_contracts.load(ctx.deps.storage)?;
+
+        let mut authorized_nft_contracts: Vec<Addr> =
+            self.authorized_nft_contracts.load(ctx.deps.storage)?;
         self.ensure_unique_nft_contract_addr(&authorized_nft_contracts, &nft_contract_address)?;
 
         authorized_nft_contracts.push(nft_contract_address.clone());
@@ -127,34 +144,52 @@ impl LinkageContract {
 
         let event = Event::new("add_authorized_nft_contract")
             .add_attribute("executor", ctx.info.sender.to_string())
-            .add_attribute("new_authorized_nft_contract", nft_contract_address.to_string());
+            .add_attribute(
+                "new_authorized_nft_contract",
+                nft_contract_address.to_string(),
+            );
 
         Ok(Response::new()
             .add_attribute("action", "add_authorized_nft_contract")
-            .add_attribute("new_authorized_nft_contract", nft_contract_address.to_string())
+            .add_attribute(
+                "new_authorized_nft_contract",
+                nft_contract_address.to_string(),
+            )
             .add_event(event))
     }
 
-
     #[sv::msg(exec)]
-    pub fn remove_authorized_nft_contract(&self, ctx: ExecCtx, nft_contract_address: Addr) -> Result<Response, ContractError> {
+    pub fn remove_authorized_nft_contract(
+        &self,
+        ctx: ExecCtx,
+        nft_contract_address: Addr,
+    ) -> Result<Response, ContractError> {
         self.authorize_admin(ctx.deps.as_ref(), &ctx.info.sender)?;
 
         self.ensure_valid_contract_addr(ctx.deps.api, &nft_contract_address)?;
 
         let mut authorized_nft_contracts = self.authorized_nft_contracts.load(ctx.deps.storage)?;
 
-        if let Some(pos) = authorized_nft_contracts.iter().position(|x| x == &nft_contract_address) {
+        if let Some(pos) = authorized_nft_contracts
+            .iter()
+            .position(|x| x == &nft_contract_address)
+        {
             authorized_nft_contracts.remove(pos);
             self.save_authorized_nft_contracts(ctx.deps.storage, &authorized_nft_contracts)?;
 
             let event = Event::new("remove_authorized_nft_contract")
-            .add_attribute("executor", ctx.info.sender.to_string())
-            .add_attribute("removed_authorized_nft_contract", nft_contract_address.to_string());
+                .add_attribute("executor", ctx.info.sender.to_string())
+                .add_attribute(
+                    "removed_authorized_nft_contract",
+                    nft_contract_address.to_string(),
+                );
 
             Ok(Response::new()
                 .add_attribute("action", "remove_authorized_nft_contract")
-                .add_attribute("removed_authorized_nft_contract", nft_contract_address.to_string())
+                .add_attribute(
+                    "removed_authorized_nft_contract",
+                    nft_contract_address.to_string(),
+                )
                 .add_event(event))
         } else {
             Err(ContractError::AdminNotFound())
@@ -180,15 +215,20 @@ impl LinkageContract {
         let did = self.ensure_valid_did(msg)?;
         self.authorize_contract(ctx.deps.as_ref(), &ctx.info.sender)?;
 
-        // let key: Nft = Nft { 
-        //     contract_address: ctx.info.sender.clone(), 
+        // let key: Nft = Nft {
+        //     contract_address: ctx.info.sender.clone(),
         //     token_id: token_id.clone(),
         // };
-        let entry: NftLockEntry = NftLockEntry { 
-            sender: sender.clone(), 
+        let entry: NftLockEntry = NftLockEntry {
+            sender: sender.clone(),
             did: did.clone(),
         };
-        self.save_nft_linkage(ctx.deps.storage, ctx.info.sender.clone(), token_id.clone(), &entry)?;
+        self.save_nft_linkage(
+            ctx.deps.storage,
+            ctx.info.sender.clone(),
+            token_id.clone(),
+            &entry,
+        )?;
 
         let event = Event::new("receive_nft")
             .add_attribute("executor", ctx.info.sender.to_string())
@@ -205,9 +245,17 @@ impl LinkageContract {
     }
 
     #[sv::msg(exec)]
-    pub fn unlock_nft(&self, ctx: ExecCtx, contract_address: Addr, token_id: String) -> Result<Response, ContractError> {
+    pub fn unlock_nft(
+        &self,
+        ctx: ExecCtx,
+        contract_address: Addr,
+        token_id: String,
+    ) -> Result<Response, ContractError> {
         // find NFT
-        let result = self.locked_nfts.load(ctx.deps.storage, (contract_address.clone(), token_id.clone()));
+        let result = self.locked_nfts.load(
+            ctx.deps.storage,
+            (contract_address.clone(), token_id.clone()),
+        );
         match result {
             Ok(nft) => {
                 self.authorize_contract(ctx.deps.as_ref(), &contract_address)?; // TODO is it really required?
@@ -215,7 +263,12 @@ impl LinkageContract {
                     self.authorize_sender(&ctx.info.sender, &nft)?
                 }
 
-                self.remove_nft_linkage(ctx.deps.storage, contract_address.clone(), token_id.clone(), &nft)?;
+                self.remove_nft_linkage(
+                    ctx.deps.storage,
+                    contract_address.clone(),
+                    token_id.clone(),
+                    &nft,
+                )?;
 
                 let exec_msg = Cw721ExecuteMsg {
                     transfer_nft: TransferNftMsg {
@@ -233,18 +286,18 @@ impl LinkageContract {
                 let sub_msg = SubMsg::reply_on_error(msg, 1u64);
 
                 let event = Event::new("unlock_nft")
-                .add_attribute("executor", ctx.info.sender.as_str())
-                .add_attribute("contract_address", contract_address.as_str())
-                .add_attribute("token_id", token_id.clone())
-                .add_attribute("did", nft.did.clone());
-    
-            Ok(Response::new()
-                .add_attribute("action", "unlock_nft")
-                .add_attribute("contract_address", contract_address.as_str())
-                .add_attribute("token_id", token_id.clone())
-                .add_attribute("did", nft.did.clone())
-                .add_event(event)
-                .add_submessage(sub_msg))
+                    .add_attribute("executor", ctx.info.sender.as_str())
+                    .add_attribute("contract_address", contract_address.as_str())
+                    .add_attribute("token_id", token_id.clone())
+                    .add_attribute("did", nft.did.clone());
+
+                Ok(Response::new()
+                    .add_attribute("action", "unlock_nft")
+                    .add_attribute("contract_address", contract_address.as_str())
+                    .add_attribute("token_id", token_id.clone())
+                    .add_attribute("did", nft.did.clone())
+                    .add_event(event)
+                    .add_submessage(sub_msg))
             }
             Err(e) => Err(ContractError::LinkageContractError(e)),
         }
@@ -265,7 +318,6 @@ impl LinkageContract {
     }
 
     // ------------ NFT Queries ------------
-
 
     // #[sv::msg(query)]
     // pub fn authorized_contract(&self, ctx: QueryCtx) -> Result<MessageResponse, ContractError> {
@@ -295,7 +347,10 @@ impl LinkageContract {
         token_id: String,
     ) -> Result<NftLockEntryResponse, ContractError> {
         let cloned_token_id = token_id.clone();
-        let result = self.locked_nfts.load(ctx.deps.storage, (contract_address.clone(), token_id.clone()));
+        let result = self.locked_nfts.load(
+            ctx.deps.storage,
+            (contract_address.clone(), token_id.clone()),
+        );
         match result {
             Ok(a) => Ok(NftLockEntryResponse {
                 contract_address,
@@ -309,12 +364,19 @@ impl LinkageContract {
 
     // TODO: test
     #[sv::msg(query)]
-    pub fn get_locked_nfts_by_did(&self, ctx: QueryCtx, did: String) -> Result<Vec<NftLockEntryResponse>, ContractError> {
+    pub fn get_locked_nfts_by_did(
+        &self,
+        ctx: QueryCtx,
+        did: String,
+    ) -> Result<Vec<NftLockEntryResponse>, ContractError> {
         let nfts_by_did = self.nfts_by_did.load(ctx.deps.storage, did.clone())?;
         let mut result: Vec<NftLockEntryResponse> = vec![];
 
         for nft in nfts_by_did.iter() {
-            let entry = self.locked_nfts.load(ctx.deps.storage, (nft.contract_address.clone(), nft.token_id.clone()))?;
+            let entry = self.locked_nfts.load(
+                ctx.deps.storage,
+                (nft.contract_address.clone(), nft.token_id.clone()),
+            )?;
             let nft: NftLockEntryResponse = NftLockEntryResponse {
                 contract_address: nft.contract_address.clone(),
                 token_id: nft.token_id.clone(),
@@ -329,12 +391,19 @@ impl LinkageContract {
 
     // TODO: test
     #[sv::msg(query)]
-    pub fn get_locked_nfts_by_owner(&self, ctx: QueryCtx, owner: Addr) -> Result<Vec<NftLockEntryResponse>, ContractError> {
+    pub fn get_locked_nfts_by_owner(
+        &self,
+        ctx: QueryCtx,
+        owner: Addr,
+    ) -> Result<Vec<NftLockEntryResponse>, ContractError> {
         let nfts_by_owner = self.nfts_by_owner.load(ctx.deps.storage, owner.clone())?;
         let mut result: Vec<NftLockEntryResponse> = vec![];
 
         for nft in nfts_by_owner.iter() {
-            let entry = self.locked_nfts.load(ctx.deps.storage, (nft.contract_address.clone(), nft.token_id.clone()))?;
+            let entry = self.locked_nfts.load(
+                ctx.deps.storage,
+                (nft.contract_address.clone(), nft.token_id.clone()),
+            )?;
             let nft: NftLockEntryResponse = NftLockEntryResponse {
                 contract_address: nft.contract_address.clone(),
                 token_id: nft.token_id.clone(),
@@ -347,35 +416,46 @@ impl LinkageContract {
         Ok(result)
     }
 
-   
+    // -------------------------------
 
-    // ------------------------------- 
-
-    fn save_admins(&self, storage: &mut dyn Storage, admins: &Vec<Addr>) ->  Result<(), ContractError> {
-        let result = self.admins.save(storage, admins);
-        match result {
-            Ok(_) => Ok(()),
-            Err(e) => Err(ContractError::LinkageContractError(e)) //  TODO specific error
-        }
+    fn save_admins(
+        &self,
+        storage: &mut dyn Storage,
+        admins: &Vec<Addr>,
+    ) -> Result<(), ContractError> {
+        self.admins
+            .save(storage, admins)
+            .map_err(|e| ContractError::StorageError("admins".to_string(), e))
     }
 
-    fn save_authorized_nft_contracts(&self, storage: &mut dyn Storage, authorized_nft_contracts: &Vec<Addr>) ->  Result<(), ContractError> {
-        let result = self.authorized_nft_contracts.save(storage, authorized_nft_contracts);
-        match result {
-            Ok(_) => Ok(()),
-            Err(e) => Err(ContractError::LinkageContractError(e)) //  TODO specific error
-        }
+    fn save_authorized_nft_contracts(
+        &self,
+        storage: &mut dyn Storage,
+        authorized_nft_contracts: &Vec<Addr>,
+    ) -> Result<(), ContractError> {
+        self.authorized_nft_contracts
+            .save(storage, authorized_nft_contracts)
+            .map_err(|e| ContractError::StorageError("authorized nft contracts".to_string(), e))
     }
 
-    fn save_nft_linkage(&self, storage: &mut dyn Storage, contract_addr: Addr, token_id: String, entry: &NftLockEntry) ->  Result<(), ContractError> {
-        if self.locked_nfts.has(storage, (contract_addr.clone(), token_id.clone())) {
-            return Err(ContractError::AlreadyExists); //  TODO specific error
+    fn save_nft_linkage(
+        &self,
+        storage: &mut dyn Storage,
+        contract_addr: Addr,
+        token_id: String,
+        entry: &NftLockEntry,
+    ) -> Result<(), ContractError> {
+        if self
+            .locked_nfts
+            .has(storage, (contract_addr.clone(), token_id.clone()))
+        {
+            return Err(ContractError::AlreadyExists("locked nfts".to_string()));
         }
-        
-        let result = self.locked_nfts.save(storage, (contract_addr.clone(), token_id.clone()), entry);
-        if let Err(e) = result {
-            return Err(ContractError::LinkageContractError(e)); //  TODO specific error
-        }
+
+        self.locked_nfts
+            .save(storage, (contract_addr.clone(), token_id.clone()), entry)
+            .map_err(|e| ContractError::StorageError("locked nfts".to_string(), e))?;
+
         let nft = Nft {
             contract_address: contract_addr.clone(),
             token_id: token_id.clone(),
@@ -389,17 +469,19 @@ impl LinkageContract {
                     Some(mut nfts) => {
                         nfts.push(nft.clone());
                         nfts
-                    },
+                    }
                     None => {
                         vec![nft.clone()]
                     }
                 };
-                let result = self.nfts_by_owner.save(storage, entry.sender.clone(), &nfts_vec);
+                let result = self
+                    .nfts_by_owner
+                    .save(storage, entry.sender.clone(), &nfts_vec);
                 if let Err(e) = result {
                     return Err(ContractError::LinkageContractError(e)); //  TODO specific error
                 }
-            },
-            Err(e) => return Err(ContractError::LinkageContractError(e)) //  TODO specific error
+            }
+            Err(e) => return Err(ContractError::LinkageContractError(e)), //  TODO specific error
         }
 
         // TODO add some addioinal checking for nft duplication ?????
@@ -410,7 +492,7 @@ impl LinkageContract {
                     Some(mut nfts) => {
                         nfts.push(nft.clone());
                         nfts
-                    },
+                    }
                     None => {
                         vec![nft.clone()]
                     }
@@ -419,30 +501,34 @@ impl LinkageContract {
                 if let Err(e) = result {
                     return Err(ContractError::LinkageContractError(e)); //  TODO specific error
                 }
-            },
-            Err(e) => return Err(ContractError::LinkageContractError(e)) //  TODO specific error
+            }
+            Err(e) => return Err(ContractError::LinkageContractError(e)), //  TODO specific error
         }
 
         Ok(())
-
-
     }
 
-
-    fn remove_nft_linkage(&self, storage: &mut dyn Storage, contract_addr: Addr, token_id: String, entry: &NftLockEntry) ->  Result<(), ContractError> {
-
+    fn remove_nft_linkage(
+        &self,
+        storage: &mut dyn Storage,
+        contract_addr: Addr,
+        token_id: String,
+        entry: &NftLockEntry,
+    ) -> Result<(), ContractError> {
         let result = self.nfts_by_owner.may_load(storage, entry.sender.clone());
         match result {
             Ok(result) => {
                 let nfts_vec = match result {
                     Some(mut nfts) => {
-                        let pos = nfts.iter().position(|x| x.token_id.eq(&token_id) && x.contract_address.eq(&contract_addr));
+                        let pos = nfts.iter().position(|x| {
+                            x.token_id.eq(&token_id) && x.contract_address.eq(&contract_addr)
+                        });
                         match pos {
-                            Some(pos) =>  nfts.remove(pos),
-                            None => return Err(ContractError::NotFound) //  TODO specific error
+                            Some(pos) => nfts.remove(pos),
+                            None => return Err(ContractError::NotFound), //  TODO specific error
                         };
                         nfts
-                    },
+                    }
                     None => {
                         return Err(ContractError::NotFound); //  TODO specific error
                     }
@@ -450,13 +536,15 @@ impl LinkageContract {
                 if nfts_vec.is_empty() {
                     self.nfts_by_owner.remove(storage, entry.sender.clone());
                 } else {
-                    let result = self.nfts_by_owner.save(storage, entry.sender.clone(), &nfts_vec);
+                    let result = self
+                        .nfts_by_owner
+                        .save(storage, entry.sender.clone(), &nfts_vec);
                     if let Err(e) = result {
                         return Err(ContractError::LinkageContractError(e)); //  TODO specific error
                     }
                 }
-            },
-            Err(e) => return Err(ContractError::LinkageContractError(e)) //  TODO specific error
+            }
+            Err(e) => return Err(ContractError::LinkageContractError(e)), //  TODO specific error
         }
 
         let result = self.nfts_by_did.may_load(storage, entry.did.clone());
@@ -464,13 +552,15 @@ impl LinkageContract {
             Ok(result) => {
                 let nfts_vec = match result {
                     Some(mut nfts) => {
-                        let pos = nfts.iter().position(|x| x.token_id.eq(&token_id) && x.contract_address.eq(&contract_addr));
+                        let pos = nfts.iter().position(|x| {
+                            x.token_id.eq(&token_id) && x.contract_address.eq(&contract_addr)
+                        });
                         match pos {
-                            Some(pos) =>  nfts.remove(pos),
-                            None => return Err(ContractError::NotFound) //  TODO specific error
+                            Some(pos) => nfts.remove(pos),
+                            None => return Err(ContractError::NotFound), //  TODO specific error
                         };
                         nfts
-                    },
+                    }
                     None => {
                         return Err(ContractError::NotFound); //  TODO specific error
                     }
@@ -483,15 +573,14 @@ impl LinkageContract {
                         return Err(ContractError::LinkageContractError(e)); //  TODO specific error
                     }
                 }
-            },
-            Err(e) => return Err(ContractError::LinkageContractError(e)) //  TODO specific error
+            }
+            Err(e) => return Err(ContractError::LinkageContractError(e)), //  TODO specific error
         }
 
-        self.locked_nfts.remove(storage, (contract_addr.clone(), token_id.clone()));
+        self.locked_nfts
+            .remove(storage, (contract_addr.clone(), token_id.clone()));
 
         Ok(())
-
-
     }
 
     fn is_admin(&self, deps: Deps, sender: &Addr) -> Result<bool, ContractError> {
@@ -504,8 +593,8 @@ impl LinkageContract {
                 } else {
                     Ok(false)
                 }
-            },
-            Err(e) => Err(ContractError::LinkageContractError(e)) //  TODO specific error
+            }
+            Err(e) => Err(ContractError::LinkageContractError(e)), //  TODO specific error
         }
     }
 
@@ -526,8 +615,8 @@ impl LinkageContract {
                 } else {
                     Ok(false)
                 }
-            },
-            Err(e) => Err(ContractError::LinkageContractError(e)) //  TODO specific error
+            }
+            Err(e) => Err(ContractError::LinkageContractError(e)), //  TODO specific error
         }
     }
 
@@ -549,47 +638,62 @@ impl LinkageContract {
         Ok(())
     }
 
-    
-
-    fn ensure_valid_admin(&self, api: &dyn Api, admin: String) -> Result<Addr, ContractError> {
-        let addr = api.addr_validate(&admin)?;
-        Ok(addr)
+    fn ensure_valid_admin(&self, api: &dyn Api, admin: &str) -> Result<Addr, ContractError> {
+        api.addr_validate(admin).map_err(|e| {
+            ContractError::InvalidAdminAddress(e)
+        })
     }
 
-    fn ensure_unique_admins(&self, admins: &Vec<Addr>, new_admin: &Addr) -> Result<(), ContractError> {
+    fn ensure_unique_admins(
+        &self,
+        admins: &Vec<Addr>,
+        new_admin: &Addr,
+    ) -> Result<(), ContractError> {
         if admins.contains(new_admin) {
             Err(ContractError::AdminAlreadyExists())
         } else {
-            Ok (())
+            Ok(())
         }
     }
 
-    fn ensure_valid_contract_addr(&self, api: &dyn Api, contract_addr: &Addr) -> Result<Addr, ContractError> {
-        let addr = api.addr_validate(contract_addr.as_str())?;
-        Ok(addr)
+    fn ensure_valid_contract_addr(
+        &self,
+        api: &dyn Api,
+        contract_addr: &Addr,
+    ) -> Result<Addr, ContractError> {
+        api.addr_validate(contract_addr.as_str()).map_err(|e| {
+            ContractError::InvalidContractAddress(e)
+        })
     }
 
-    fn ensure_unique_nft_contract_addr(&self, ntf_contract_addrs: &Vec<Addr>, contract_addr: &Addr) -> Result<(), ContractError> {
+    fn ensure_unique_nft_contract_addr(
+        &self,
+        ntf_contract_addrs: &Vec<Addr>,
+        contract_addr: &Addr,
+    ) -> Result<(), ContractError> {
         if ntf_contract_addrs.contains(contract_addr) {
             Err(ContractError::NftContractAlreadyExists())
         } else {
-            Ok (())
+            Ok(())
         }
     }
 
     fn ensure_valid_did(&self, msg: Binary) -> Result<String, ContractError> {
         let bytes = msg.to_vec();
-        let did_result = String::from_utf8(bytes);
+        String::from_utf8(bytes).map_err(|e| {
+            ContractError::DidInvalid(e)
+        })
+        
+    }
 
-        match did_result {
-            Ok(did) => {
-                Ok(did)
-            },
-            Err(e) => Err(ContractError::DidInvalid(e))
+    fn ensure_one_admin(&self, admins: &Vec<Addr>) -> Result<(), ContractError> {
+        if admins.is_empty() {
+            return Err(ContractError::NoAdmin);
         }
-
+        Ok(())
     }
 }
+
 
 
 //  TODO add events values checking in tests
@@ -603,7 +707,77 @@ mod tests {
     use cw_multi_test::{Contract, ContractWrapper, Executor, IntoAddr};
     use sylvia::multitest::App;
 
-    // -------------------- Admin tests 
+    #[test]
+    fn test_instantiate_success() {
+        let app = App::default();
+        let code_id = CodeId::store_code(&app);
+
+        let admin1 = "admin1".into_addr();
+        let admin2 = "admin2".into_addr();
+        let nft_contract1 = "nft_contract1".into_addr();
+        let nft_contract2 = "nft_contract2".into_addr();
+
+        let contract = code_id
+            .instantiate(
+                vec![admin1.clone(), admin2.clone()],
+                vec![nft_contract1.clone(), nft_contract2.clone()],
+            )
+            .call(&admin1)
+            .expect("instantiate should succeed");
+
+        let admins = contract.get_admins().expect("get_admins failed");
+        assert_eq!(admins.len(), 2);
+        assert!(admins.contains(&admin1));
+        assert!(admins.contains(&admin2));
+
+        let nft_contracts = contract
+            .get_authorized_nft_contracts()
+            .expect("get_authorized_nft_contracts failed");
+        assert_eq!(nft_contracts.len(), 2);
+        assert!(nft_contracts.contains(&nft_contract1));
+        assert!(nft_contracts.contains(&nft_contract2));
+    }
+
+    #[test]
+    fn test_instantiate_no_admins_should_fail() {
+        let app = App::default();
+        let code_id = CodeId::store_code(&app);
+
+        let nft_contract = "nft_contract".into_addr();
+
+        let contract_result = code_id
+            .instantiate(vec![], vec![nft_contract.clone()])
+            .call(&nft_contract);
+        assert!(contract_result.is_err());
+        assert_eq!(
+            contract_result.unwrap_err().to_string(),
+            "At least one contract admin is required"
+        );
+    }
+
+    #[test]
+    fn test_instantiate_with_empty_authorized_nft_contracts() {
+        let app = App::default();
+        let code_id = CodeId::store_code(&app);
+
+        let admin = "admin".into_addr();
+
+        let contract = code_id
+            .instantiate(vec![admin.clone()], vec![])
+            .call(&admin)
+            .expect("instantiate should succeed even without NFT contracts");
+
+        let admins = contract.get_admins().expect("get_admins failed");
+        assert_eq!(admins.len(), 1);
+        assert_eq!(admins[0], admin);
+
+        let nft_contracts = contract
+            .get_authorized_nft_contracts()
+            .expect("get_authorized_nft_contracts failed");
+        assert_eq!(nft_contracts.len(), 0);
+    }
+
+    // -------------------- Admin tests
     #[test]
     fn test_add_admin() {
         let app = App::default();
@@ -621,15 +795,23 @@ mod tests {
         let admin1 = "admin1".into_addr();
 
         let res = contract
-            .add_admin(admin1.to_string()).call(&owner).expect("error adding admin");
+            .add_admin(admin1.to_string())
+            .call(&owner)
+            .expect("error adding admin");
 
         assert_eq!(res.events[0].ty, "execute");
         assert_eq!(res.events[0].attributes[0].key, "_contract_address");
-        assert_eq!(res.events[0].attributes[0].value, contract.contract_addr.to_string());
-        
+        assert_eq!(
+            res.events[0].attributes[0].value,
+            contract.contract_addr.to_string()
+        );
+
         assert_eq!(res.events[1].ty, "wasm");
         assert_eq!(res.events[1].attributes[0].key, "_contract_address");
-        assert_eq!(res.events[1].attributes[0].value, contract.contract_addr.to_string());
+        assert_eq!(
+            res.events[1].attributes[0].value,
+            contract.contract_addr.to_string()
+        );
         assert_eq!(res.events[1].attributes[1].key, "action");
         assert_eq!(res.events[1].attributes[1].value, "add_admin");
         assert_eq!(res.events[1].attributes[2].key, "new_admin");
@@ -637,7 +819,10 @@ mod tests {
 
         assert_eq!(res.events[2].ty, "wasm-add_admin");
         assert_eq!(res.events[2].attributes[0].key, "_contract_address");
-        assert_eq!(res.events[2].attributes[0].value, contract.contract_addr.to_string());
+        assert_eq!(
+            res.events[2].attributes[0].value,
+            contract.contract_addr.to_string()
+        );
         assert_eq!(res.events[2].attributes[1].key, "executor");
         assert_eq!(res.events[2].attributes[1].value, owner.to_string());
         assert_eq!(res.events[2].attributes[2].key, "new_admin");
@@ -645,8 +830,7 @@ mod tests {
 
         let non_admin1 = "non_admin".into_addr();
         let admin2 = "admin2".into_addr();
-        let res = contract
-            .add_admin(admin2.to_string()).call(&non_admin1);
+        let res = contract.add_admin(admin2.to_string()).call(&non_admin1);
 
         assert!(res.is_err(), "Expected Err, but got an Ok");
         assert_eq!("Unauthorized", res.err().unwrap().to_string());
@@ -654,7 +838,87 @@ mod tests {
         let admin3 = "admin3".into_addr();
 
         contract
-            .add_admin(admin3.to_string()).call(&owner).expect("error adding admin3");
+            .add_admin(admin3.to_string())
+            .call(&owner)
+            .expect("error adding admin3");
+
+        let admin4 = "admin4".into_addr();
+
+        contract
+            .add_admin(admin4.to_string())
+            .call(&admin1)
+            .expect("error adding admin3");
+    }
+
+    #[test]
+    fn test_add_invalid_admin() {
+        let app = App::default();
+        let code_id = CodeId::store_code(&app);
+
+        let owner = "owner".into_addr();
+        let auth_address = "cw721_address".into_addr();
+
+        let contract = code_id
+            .instantiate(vec![owner.clone()], vec![auth_address.clone()])
+            .call(&owner)
+            .unwrap();
+
+        // Attempt to add an invalid admin (e.g., an empty string)
+        let invalid_admin = "";
+        let res = contract.add_admin(invalid_admin.to_string()).call(&owner);
+
+        // Ensure the operation fails
+        assert!(res.is_err(), "Expected Err, but got Ok");
+        assert_eq!(
+            res.err().unwrap().to_string(),
+            "Invalid admin address: Generic error: Error decoding bech32",
+            "Expected 'Invalid address' error"
+        );
+
+        // Attempt to add an invalid admin (e.g., a malformed address)
+        let malformed_admin = "invalid_address";
+        let res = contract.add_admin(malformed_admin.to_string()).call(&owner);
+
+        // Ensure the operation fails
+        assert!(res.is_err(), "Expected Err, but got Ok");
+        assert_eq!(
+            res.err().unwrap().to_string(),
+            "Invalid admin address: Generic error: Error decoding bech32",
+            "Expected 'Invalid address' error"
+        );
+    }
+
+    #[test]
+    fn test_add_duplicate_admin() {
+        let app = App::default();
+        let code_id = CodeId::store_code(&app);
+
+        let owner = "owner".into_addr();
+        let auth_address = "cw721_address".into_addr();
+
+        let contract = code_id
+            .instantiate(vec![owner.clone()], vec![auth_address.clone()])
+            .call(&owner)
+            .unwrap();
+
+        let admin1 = "admin1".into_addr();
+
+        // Add the first admin successfully
+        contract
+            .add_admin(admin1.to_string())
+            .call(&owner)
+            .expect("error adding admin1");
+
+        // Attempt to add the same admin again
+        let res = contract.add_admin(admin1.to_string()).call(&owner);
+
+        // Ensure the operation fails
+        assert!(res.is_err(), "Expected Err, but got Ok");
+        assert_eq!(
+            res.err().unwrap().to_string(),
+            "Admin already exists",
+            "Expected 'Admin already exists' error"
+        );
     }
 
     #[test]
@@ -671,88 +935,162 @@ mod tests {
             .call(&owner)
             .unwrap();
         let admin1 = "admin1".into_addr();
-    
+
         // First, add an admin to remove later
         contract
-            .add_admin(admin1.to_string()).call(&owner).expect("error adding admin1");
-    
+            .add_admin(admin1.to_string())
+            .call(&owner)
+            .expect("error adding admin1");
+
         // Remove the admin
         let res = contract
-            .remove_admin(admin1.to_string()).call(&owner).expect("error removing admin");
-    
+            .remove_admin(admin1.to_string())
+            .call(&owner)
+            .expect("error removing admin");
+
         // Validate the response attributes and events
         assert_eq!(res.events[0].ty, "execute");
         assert_eq!(res.events[0].attributes[0].key, "_contract_address");
-        assert_eq!(res.events[0].attributes[0].value, contract.contract_addr.to_string());
-    
+        assert_eq!(
+            res.events[0].attributes[0].value,
+            contract.contract_addr.to_string()
+        );
+
         assert_eq!(res.events[1].ty, "wasm");
         assert_eq!(res.events[1].attributes[0].key, "_contract_address");
-        assert_eq!(res.events[1].attributes[0].value, contract.contract_addr.to_string());
+        assert_eq!(
+            res.events[1].attributes[0].value,
+            contract.contract_addr.to_string()
+        );
         assert_eq!(res.events[1].attributes[1].key, "action");
         assert_eq!(res.events[1].attributes[1].value, "remove_admin");
         assert_eq!(res.events[1].attributes[2].key, "removed_admin");
         assert_eq!(res.events[1].attributes[2].value, admin1.to_string());
-    
+
         // Test removing a non-existing admin
         let non_admin = "non_admin".into_addr();
-        let res = contract
-            .remove_admin(non_admin.to_string()).call(&owner);
-        
+        let res = contract.remove_admin(non_admin.to_string()).call(&owner);
+
         assert!(res.is_err(), "Expected Err, but got an Ok");
         assert_eq!("Admin not found", res.err().unwrap().to_string());
-    
+
         // Test unauthorized removal attempt
         let unauthorized_user = "unauthorized".into_addr();
         let another_admin = "admin2".into_addr();
-        
+
         // Add a second admin to test unauthorized removal
         contract
-            .add_admin(another_admin.to_string()).call(&owner).expect("error adding admin2");
-    
+            .add_admin(another_admin.to_string())
+            .call(&owner)
+            .expect("error adding admin2");
+
         let res = contract
-            .remove_admin(another_admin.to_string()).call(&unauthorized_user);
-    
+            .remove_admin(another_admin.to_string())
+            .call(&unauthorized_user);
+
         assert!(res.is_err(), "Expected Err, but got an Ok");
         assert_eq!("Unauthorized", res.err().unwrap().to_string());
     }
 
     #[test]
-    fn test_get_admins() {
+    fn test_cannot_remove_last_admin() {
         let app = App::default();
         let code_id = CodeId::store_code(&app);
     
+        let only_admin = "only_admin".into_addr();
+        let auth_address = "cw721_address".into_addr();
+    
+        let contract = code_id
+            .instantiate(vec![only_admin.clone()], vec![auth_address.clone()])
+            .call(&only_admin)
+            .unwrap();
+    
+        let res = contract
+            .remove_admin(only_admin.to_string())
+            .call(&only_admin);
+    
+        assert!(res.is_err(), "Expected error when removing last admin");
+        assert_eq!("At least one contract admin is required", res.err().unwrap().to_string());
+    }
+
+    #[test]
+    fn test_remove_same_admin_twice() {
+        let app = App::default();
+        let code_id = CodeId::store_code(&app);
+    
+        let admin = "admin".into_addr();
+        let auth_address = "cw721_address".into_addr();
+    
+        let contract = code_id
+            .instantiate(vec![admin.clone()], vec![auth_address.clone()])
+            .call(&admin)
+            .unwrap();
+    
+        let admin_to_remove = "admin2".into_addr();
+        contract
+            .add_admin(admin_to_remove.to_string())
+            .call(&admin)
+            .expect("failed to add admin");
+    
+        // First removal should succeed
+        contract
+            .remove_admin(admin_to_remove.to_string())
+            .call(&admin)
+            .expect("first removal failed");
+    
+        // Second removal should fail
+        let result = contract
+            .remove_admin(admin_to_remove.to_string())
+            .call(&admin);
+    
+        assert!(result.is_err(), "Expected error on second removal");
+        assert_eq!("Admin not found", result.unwrap_err().to_string());
+    }
+
+
+    #[test]
+    fn test_get_admins() {
+        let app = App::default();
+        let code_id = CodeId::store_code(&app);
+
         let owner = "owner".into_addr();
         let admin1 = "admin1".into_addr();
         let admin2 = "admin2".into_addr();
-    
+
         let auth_address = "cw721_address".into_addr();
-    
+
         // Instantiate contract with an initial admin
         let contract = code_id
             .instantiate(vec![admin1.clone()], vec![auth_address.clone()])
             .call(&owner)
             .unwrap();
-    
+
         // Check initial admins
         let result = contract.get_admins();
         assert!(result.is_ok(), "Expected Ok, but got an Err");
         let admins = result.unwrap();
         assert_eq!(admins.len(), 1);
         assert_eq!(admins[0], admin1);
-    
+
         // Add a second admin
-        contract.add_admin(admin2.to_string()).call(&admin1).expect("error adding admin");
-        
+        contract
+            .add_admin(admin2.to_string())
+            .call(&admin1)
+            .expect("error adding admin");
+
         let result = contract.get_admins();
         assert!(result.is_ok(), "Expected Ok, but got an Err");
         let admins = result.unwrap();
         assert_eq!(admins.len(), 2);
         assert!(admins.contains(&admin1));
         assert!(admins.contains(&admin2));
-    
+
         // Remove the first admin
-        contract.remove_admin(admin1.to_string()).call(&admin1).expect("error removing admin");
-        
+        contract
+            .remove_admin(admin1.to_string())
+            .call(&admin1)
+            .expect("error removing admin");
+
         let result = contract.get_admins();
         assert!(result.is_ok(), "Expected Ok, but got an Err");
         let admins = result.unwrap();
@@ -776,30 +1114,55 @@ mod tests {
         let new_nft_contract = "new_nft_contract".into_addr();
 
         // Successfully add a new authorized NFT contract
-        let res = contract.add_authorized_nft_contract(new_nft_contract.clone()).call(&owner);
+        let res = contract
+            .add_authorized_nft_contract(new_nft_contract.clone())
+            .call(&owner);
         assert!(res.is_ok(), "Expected Ok, but got an Err");
 
         let res = res.unwrap();
         assert_eq!(res.events[0].ty, "execute");
         assert_eq!(res.events[0].attributes[0].key, "_contract_address");
-        assert_eq!(res.events[0].attributes[0].value, contract.contract_addr.to_string());
+        assert_eq!(
+            res.events[0].attributes[0].value,
+            contract.contract_addr.to_string()
+        );
 
         assert_eq!(res.events[1].ty, "wasm");
         assert_eq!(res.events[1].attributes[0].key, "_contract_address");
-        assert_eq!(res.events[1].attributes[0].value, contract.contract_addr.to_string());
+        assert_eq!(
+            res.events[1].attributes[0].value,
+            contract.contract_addr.to_string()
+        );
         assert_eq!(res.events[1].attributes[1].key, "action");
-        assert_eq!(res.events[1].attributes[1].value, "add_authorized_nft_contract");
-        assert_eq!(res.events[1].attributes[2].key, "new_authorized_nft_contract");
-        assert_eq!(res.events[1].attributes[2].value, new_nft_contract.to_string());
+        assert_eq!(
+            res.events[1].attributes[1].value,
+            "add_authorized_nft_contract"
+        );
+        assert_eq!(
+            res.events[1].attributes[2].key,
+            "new_authorized_nft_contract"
+        );
+        assert_eq!(
+            res.events[1].attributes[2].value,
+            new_nft_contract.to_string()
+        );
 
         assert_eq!(res.events[2].ty, "wasm-add_authorized_nft_contract");
         assert_eq!(res.events[2].attributes[0].key, "_contract_address");
-        assert_eq!(res.events[2].attributes[0].value, contract.contract_addr.to_string());
+        assert_eq!(
+            res.events[2].attributes[0].value,
+            contract.contract_addr.to_string()
+        );
         assert_eq!(res.events[2].attributes[1].key, "executor");
         assert_eq!(res.events[2].attributes[1].value, owner.to_string());
-        assert_eq!(res.events[2].attributes[2].key, "new_authorized_nft_contract");
-        assert_eq!(res.events[2].attributes[2].value, new_nft_contract.to_string());
-
+        assert_eq!(
+            res.events[2].attributes[2].key,
+            "new_authorized_nft_contract"
+        );
+        assert_eq!(
+            res.events[2].attributes[2].value,
+            new_nft_contract.to_string()
+        );
 
         // Ensure it was added correctly
         let result = contract.get_authorized_nft_contracts();
@@ -809,14 +1172,21 @@ mod tests {
         assert!(authorized_contracts.contains(&new_nft_contract));
 
         // Try adding the same contract again (should fail)
-        let res = contract.add_authorized_nft_contract(new_nft_contract.clone()).call(&owner);
+        let res = contract
+            .add_authorized_nft_contract(new_nft_contract.clone())
+            .call(&owner);
         assert!(res.is_err(), "Expected Err, but got Ok");
-        assert_eq!("NFT contract already exists", res.err().unwrap().to_string());
+        assert_eq!(
+            "NFT contract already exists",
+            res.err().unwrap().to_string()
+        );
 
         // Unauthorized user should not be able to add a contract
         let unauthorized_user = "unauthorized_user".into_addr();
         let another_nft_contract = "another_nft_contract".into_addr();
-        let res = contract.add_authorized_nft_contract(another_nft_contract.clone()).call(&unauthorized_user);
+        let res = contract
+            .add_authorized_nft_contract(another_nft_contract.clone())
+            .call(&unauthorized_user);
         assert!(res.is_err(), "Expected Err, but got Ok");
         assert_eq!("Unauthorized", res.err().unwrap().to_string());
     }
@@ -834,7 +1204,9 @@ mod tests {
             .unwrap();
 
         // Remove existing authorized contract
-        let res = contract.remove_authorized_nft_contract(auth_address.clone()).call(&owner);
+        let res = contract
+            .remove_authorized_nft_contract(auth_address.clone())
+            .call(&owner);
         assert!(res.is_ok(), "Expected Ok, but got an Err");
 
         // Verify emitted events
@@ -842,8 +1214,14 @@ mod tests {
         assert_eq!(res.events[0].ty, "execute");
         assert_eq!(res.events[1].ty, "wasm");
         assert_eq!(res.events[1].attributes[1].key, "action");
-        assert_eq!(res.events[1].attributes[1].value, "remove_authorized_nft_contract");
-        assert_eq!(res.events[1].attributes[2].key, "removed_authorized_nft_contract");
+        assert_eq!(
+            res.events[1].attributes[1].value,
+            "remove_authorized_nft_contract"
+        );
+        assert_eq!(
+            res.events[1].attributes[2].key,
+            "removed_authorized_nft_contract"
+        );
         assert_eq!(res.events[1].attributes[2].value, auth_address.to_string());
 
         // Ensure contract was removed
@@ -853,13 +1231,17 @@ mod tests {
         assert!(!authorized_contracts.contains(&auth_address));
 
         // Try removing a non-existing contract (should fail)
-        let res = contract.remove_authorized_nft_contract(auth_address.clone()).call(&owner);
+        let res = contract
+            .remove_authorized_nft_contract(auth_address.clone())
+            .call(&owner);
         assert!(res.is_err(), "Expected Err, but got Ok");
         assert_eq!("Admin not found", res.err().unwrap().to_string());
 
         // Unauthorized user should not be able to remove a contract
         let unauthorized_user = "unauthorized_user".into_addr();
-        let res = contract.remove_authorized_nft_contract(auth_address.clone()).call(&unauthorized_user);
+        let res = contract
+            .remove_authorized_nft_contract(auth_address.clone())
+            .call(&unauthorized_user);
         assert!(res.is_err(), "Expected Err, but got Ok");
         assert_eq!("Unauthorized", res.err().unwrap().to_string());
     }
@@ -886,7 +1268,6 @@ mod tests {
         assert_eq!(result.len(), 1);
 
         assert_eq!(auth_address, result[0]);
-
 
         let result = contract.get_admins();
         assert!(result.is_ok(), "Expected Ok, but go an Err");
@@ -925,7 +1306,7 @@ mod tests {
 
         let result = contract.get_locked_nft(auth_address.clone(), token_id.clone());
         assert!(result.is_ok(), "Expected Ok, but got Err");
-        let expcted_nft = NftLockEntryResponse{
+        let expcted_nft = NftLockEntryResponse {
             contract_address: auth_address.clone(),
             token_id: token_id.clone(),
             sender: sender.clone(),
@@ -947,7 +1328,6 @@ mod tests {
 
         assert_eq!(expcted_nft.clone(), result[0]);
 
-
         let unauth_address = "unauth_address".into_addr();
 
         let result = contract
@@ -955,7 +1335,10 @@ mod tests {
             .call(&unauth_address);
         assert!(result.is_err(), "Expected Err, but got Ok");
 
-        assert_eq!(result.unwrap_err(), ContractError::UnauthorizedContractError);
+        assert_eq!(
+            result.unwrap_err(),
+            ContractError::UnauthorizedContractError
+        );
 
         let result = contract.get_locked_nft(unauth_address, token_id_2.clone());
         assert!(result.is_err(), "Expected Err, but got Ok");
@@ -970,7 +1353,7 @@ mod tests {
 
         let result = contract.get_locked_nft(auth_address.clone(), token_id_2.clone());
         assert!(result.is_ok(), "Expected Ok, but got Err");
-        let expcted_nft_2 = NftLockEntryResponse{
+        let expcted_nft_2 = NftLockEntryResponse {
             contract_address: auth_address.clone(),
             token_id: token_id_2.clone(),
             sender: sender.clone(),
@@ -993,7 +1376,6 @@ mod tests {
 
         assert_eq!(expcted_nft.clone(), result[0]);
         assert_eq!(expcted_nft_2.clone(), result[1]);
-
     }
 
     #[test]
@@ -1011,16 +1393,15 @@ mod tests {
         let msg = Binary::new(did.as_bytes().to_vec());
 
         let cw721_base_contract = app.app_mut().instantiate_contract(
-                    cw721_base_code_id,
-                    owner.clone(),
-                    &msg,
-                    &[],
-                    "label",
-                    None,
-                );
+            cw721_base_code_id,
+            owner.clone(),
+            &msg,
+            &[],
+            "label",
+            None,
+        );
 
         let cw721_base_contract_addr = cw721_base_contract.unwrap();
-
 
         let linkage_contract = linkage_code_id
             .instantiate(vec![admin.clone()], vec![cw721_base_contract_addr.clone()])
@@ -1037,15 +1418,19 @@ mod tests {
             .call(&cw721_base_contract_addr);
         assert!(result.is_ok(), "Expected Ok, but got Err");
 
-        let result = linkage_contract.unlock_nft(cw721_base_contract_addr.clone(), token_id.clone()).call(&sender);
+        let result = linkage_contract
+            .unlock_nft(cw721_base_contract_addr.clone(), token_id.clone())
+            .call(&sender);
         assert!(result.is_ok(), "Expected Ok, but got Err");
-        
-        let result = linkage_contract.get_locked_nft(cw721_base_contract_addr.clone(), token_id.clone());
+
+        let result =
+            linkage_contract.get_locked_nft(cw721_base_contract_addr.clone(), token_id.clone());
         assert!(result.is_err(), "Expected Err, but got Ok");
 
-        let result = linkage_contract.get_locked_nft(cw721_base_contract_addr.clone(), token_id_2.clone());
+        let result =
+            linkage_contract.get_locked_nft(cw721_base_contract_addr.clone(), token_id_2.clone());
         assert!(result.is_ok(), "Expected Ok, but got Err");
-        let expcted_nft_2 = NftLockEntryResponse{
+        let expcted_nft_2 = NftLockEntryResponse {
             contract_address: cw721_base_contract_addr.clone(),
             token_id: token_id_2.clone(),
             sender: sender.clone(),
@@ -1068,7 +1453,6 @@ mod tests {
 
         assert_eq!(expcted_nft_2.clone(), result[0]);
         // assert_eq!(expcted_nft_2.clone(), result[1]);
-
     }
 
     pub fn cw721_base_contract_mock() -> Box<dyn Contract<Empty>> {
@@ -1076,13 +1460,11 @@ mod tests {
             |_deps, _, _info, _msg: Cw721ExecuteMsg| -> StdResult<Response> {
                 Ok(Response::default())
             },
-            |_deps, _, _info, _msg: String| -> StdResult<Response> {
-                Ok(Response::default())
-            },
+            |_deps, _, _info, _msg: String| -> StdResult<Response> { Ok(Response::default()) },
             |_, _, _msg: Cw721QueryMsg| -> StdResult<Binary> {
                 let data = "test";
                 Ok(to_json_binary(data)?)
-            }
+            },
         );
         Box::new(contract)
     }
