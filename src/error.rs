@@ -17,7 +17,7 @@ pub enum ContractError {
     #[error("Invalid admin address: {0}")]
     InvalidAdminAddress(StdError),
 
-    #[error("Invalid conract address: {0}")]
+    #[error("Invalid contract address: {0}")]
     InvalidContractAddress(StdError),
 
     #[error("Not found")]
