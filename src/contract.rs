@@ -1,12 +1,14 @@
+use std::result;
+
 use crate::error::ContractError;
 use crate::responses::NftLockEntryResponse;
 use crate::state::{Nft, NftLockEntry};
-use cosmwasm_std::Order::Ascending;
 use cosmwasm_std::{
-    to_json_binary, to_json_string, Addr, Api, Binary, Deps, Event, Order, Response, StdResult,
-    Storage, SubMsg, SubMsgResult, WasmMsg,
+    to_json_binary, to_json_string, Addr, Api, Binary, Deps, Event, Response, Storage, SubMsg,
+    SubMsgResult, WasmMsg,
 };
 use cw_storage_plus::{Item, Map};
+use did_contract::state::Did;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use sylvia::ctx::{ExecCtx, InstantiateCtx, QueryCtx, ReplyCtx};
@@ -17,7 +19,7 @@ pub struct LinkageContract {
     pub authorized_nft_contracts: Item<Vec<Addr>>,
     pub locked_nfts: Map<(Addr, String), NftLockEntry>,
     pub nfts_by_owner: Map<Addr, Vec<Nft>>,
-    pub nfts_by_did: Map<String, Vec<Nft>>,
+    pub nfts_by_did: Map<Did, Vec<Nft>>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -213,8 +215,9 @@ impl LinkageContract {
         msg: Binary,
     ) -> Result<Response, ContractError> {
         let did = self.ensure_valid_did(msg)?;
+        self.ensure_valid_contract_addr(ctx.deps.api, &ctx.info.sender)?;
         self.authorize_contract(ctx.deps.as_ref(), &ctx.info.sender)?;
-
+        self.ensure_token_id(&token_id)?;
         // let key: Nft = Nft {
         //     contract_address: ctx.info.sender.clone(),
         //     token_id: token_id.clone(),
@@ -252,55 +255,72 @@ impl LinkageContract {
         token_id: String,
     ) -> Result<Response, ContractError> {
         // find NFT
-        let result = self.locked_nfts.load(
-            ctx.deps.storage,
-            (contract_address.clone(), token_id.clone()),
-        );
-        match result {
-            Ok(nft) => {
-                self.authorize_contract(ctx.deps.as_ref(), &contract_address)?; // TODO is it really required?
-                if !self.is_admin(ctx.deps.as_ref(), &ctx.info.sender)? {
-                    self.authorize_sender(&ctx.info.sender, &nft)?
-                }
-
-                self.remove_nft_linkage(
-                    ctx.deps.storage,
-                    contract_address.clone(),
-                    token_id.clone(),
-                    &nft,
-                )?;
-
-                let exec_msg = Cw721ExecuteMsg {
-                    transfer_nft: TransferNftMsg {
-                        recipient: ctx.info.sender.to_string(),
-                        token_id: token_id.clone(),
-                    },
-                };
-
-                let msg = WasmMsg::Execute {
-                    contract_addr: contract_address.to_string(),
-                    msg: to_json_binary(&exec_msg)?,
-                    funds: vec![],
-                };
-
-                let sub_msg = SubMsg::reply_on_error(msg, 1u64);
-
-                let event = Event::new("unlock_nft")
-                    .add_attribute("executor", ctx.info.sender.as_str())
-                    .add_attribute("contract_address", contract_address.as_str())
-                    .add_attribute("token_id", token_id.clone())
-                    .add_attribute("did", nft.did.clone());
-
-                Ok(Response::new()
-                    .add_attribute("action", "unlock_nft")
-                    .add_attribute("contract_address", contract_address.as_str())
-                    .add_attribute("token_id", token_id.clone())
-                    .add_attribute("did", nft.did.clone())
-                    .add_event(event)
-                    .add_submessage(sub_msg))
-            }
-            Err(e) => Err(ContractError::LinkageContractError(e)),
+        let result = self
+            .locked_nfts
+            .may_load(
+                ctx.deps.storage,
+                (contract_address.clone(), token_id.clone()),
+            )
+            .map_err(|e| {
+                ContractError::StorageError(
+                    format!("Loading nft: {}:{}", contract_address, token_id),
+                    e,
+                )
+            })?;
+        if result.is_none() {
+            return Err(ContractError::NotFound(format!(
+                "NFT not found: {}:{}",
+                contract_address, token_id
+            )));
         }
+        let nft = result.unwrap();
+        // match result {
+        //     Ok(nft) => {
+        self.authorize_contract(ctx.deps.as_ref(), &contract_address)?; // TODO is it really required?
+
+        self.authorize_admin_or_sender(ctx.deps.as_ref(), &ctx.info.sender, &nft)?;
+        // if !self.is_admin(ctx.deps.as_ref(), &ctx.info.sender)? {
+        //     self.authorize_sender(&ctx.info.sender, &nft)?
+        // }
+
+        self.remove_nft_linkage(
+            ctx.deps.storage,
+            contract_address.clone(),
+            token_id.clone(),
+            &nft,
+        )?;
+
+        let exec_msg = Cw721ExecuteMsg {
+            transfer_nft: TransferNftMsg {
+                recipient: ctx.info.sender.to_string(),
+                token_id: token_id.clone(),
+            },
+        };
+
+        let msg = WasmMsg::Execute {
+            contract_addr: contract_address.to_string(),
+            msg: to_json_binary(&exec_msg)?,
+            funds: vec![],
+        };
+
+        let sub_msg = SubMsg::reply_on_error(msg, 1u64);
+
+        let event = Event::new("unlock_nft")
+            .add_attribute("executor", ctx.info.sender.as_str())
+            .add_attribute("contract_address", contract_address.as_str())
+            .add_attribute("token_id", token_id.clone())
+            .add_attribute("did", nft.did.clone());
+
+        Ok(Response::new()
+            .add_attribute("action", "unlock_nft")
+            .add_attribute("contract_address", contract_address.as_str())
+            .add_attribute("token_id", token_id.clone())
+            .add_attribute("did", nft.did.clone())
+            .add_event(event)
+            .add_submessage(sub_msg))
+        //     }
+        //     Err(e) => Err(ContractError::LinkageContractError(e)),
+        // }
     }
 
     #[sv::msg(reply)] // TODO verify if needed
@@ -347,16 +367,23 @@ impl LinkageContract {
     pub fn get_locked_nfts_by_did(
         &self,
         ctx: QueryCtx,
-        did: String,
+        did: Did,
     ) -> Result<Vec<NftLockEntryResponse>, ContractError> {
-        let nfts_by_did = self.nfts_by_did.load(ctx.deps.storage, did.clone())?;
+        let nfts_by_did = self.nfts_by_did.may_load(ctx.deps.storage, did.clone())?;
+        if nfts_by_did.is_none() {
+            return Ok(vec![]);
+        }
         let mut result: Vec<NftLockEntryResponse> = vec![];
 
-        for nft in nfts_by_did.iter() {
-            let entry = self.locked_nfts.load(
+        for nft in nfts_by_did.unwrap().iter() {
+            let entry = self.locked_nfts.may_load(
                 ctx.deps.storage,
                 (nft.contract_address.clone(), nft.token_id.clone()),
             )?;
+            if entry.is_none() {
+                continue;
+            }
+            let entry = entry.unwrap();
             let nft: NftLockEntryResponse = NftLockEntryResponse {
                 contract_address: nft.contract_address.clone(),
                 token_id: nft.token_id.clone(),
@@ -376,14 +403,23 @@ impl LinkageContract {
         ctx: QueryCtx,
         owner: Addr,
     ) -> Result<Vec<NftLockEntryResponse>, ContractError> {
-        let nfts_by_owner = self.nfts_by_owner.load(ctx.deps.storage, owner.clone())?;
+        let nfts_by_owner = self
+            .nfts_by_owner
+            .may_load(ctx.deps.storage, owner.clone())?;
+        if nfts_by_owner.is_none() {
+            return Ok(vec![]);
+        }
         let mut result: Vec<NftLockEntryResponse> = vec![];
 
-        for nft in nfts_by_owner.iter() {
-            let entry = self.locked_nfts.load(
+        for nft in nfts_by_owner.unwrap().iter() {
+            let entry = self.locked_nfts.may_load(
                 ctx.deps.storage,
                 (nft.contract_address.clone(), nft.token_id.clone()),
             )?;
+            if entry.is_none() {
+                continue;
+            }
+            let entry = entry.unwrap();
             let nft: NftLockEntryResponse = NftLockEntryResponse {
                 contract_address: nft.contract_address.clone(),
                 token_id: nft.token_id.clone(),
@@ -429,63 +465,170 @@ impl LinkageContract {
             .locked_nfts
             .has(storage, (contract_addr.clone(), token_id.clone()))
         {
-            return Err(ContractError::AlreadyExists("locked nfts".to_string()));
+            return Err(ContractError::AlreadyExists(format!(
+                "NFT already locked: {}:{}",
+                contract_addr, token_id
+            )));
         }
 
         self.locked_nfts
             .save(storage, (contract_addr.clone(), token_id.clone()), entry)
-            .map_err(|e| ContractError::StorageError("locked nfts".to_string(), e))?;
+            .map_err(|e| {
+                ContractError::StorageError(format!("Save NFT: {}:{}", contract_addr, token_id), e)
+            })?;
 
         let nft = Nft {
             contract_address: contract_addr.clone(),
             token_id: token_id.clone(),
         };
 
-        // TODO add some addioinal checking for nft duplication ?????
-        let result = self.nfts_by_owner.may_load(storage, entry.sender.clone());
-        match result {
-            Ok(result) => {
-                let nfts_vec = match result {
-                    Some(mut nfts) => {
-                        nfts.push(nft.clone());
-                        nfts
-                    }
-                    None => {
-                        vec![nft.clone()]
-                    }
-                };
-                let result = self
-                    .nfts_by_owner
-                    .save(storage, entry.sender.clone(), &nfts_vec);
-                if let Err(e) = result {
-                    return Err(ContractError::LinkageContractError(e)); //  TODO specific error
-                }
-            }
-            Err(e) => return Err(ContractError::LinkageContractError(e)), //  TODO specific error
-        }
+        let result = self
+            .nfts_by_owner
+            .may_load(storage, entry.sender.clone())
+            .map_err(|e| {
+                ContractError::StorageError(
+                    format!("Load NFT by owner for: {}:{}", contract_addr, token_id),
+                    e,
+                )
+            })?;
 
-        // TODO add some addioinal checking for nft duplication ?????
-        let result = self.nfts_by_did.may_load(storage, entry.did.clone());
-        match result {
-            Ok(result) => {
-                let nfts_vec = match result {
-                    Some(mut nfts) => {
-                        nfts.push(nft.clone());
-                        nfts
-                    }
-                    None => {
-                        vec![nft.clone()]
-                    }
-                };
-                let result = self.nfts_by_did.save(storage, entry.did.clone(), &nfts_vec);
-                if let Err(e) = result {
-                    return Err(ContractError::LinkageContractError(e)); //  TODO specific error
-                }
-            }
-            Err(e) => return Err(ContractError::LinkageContractError(e)), //  TODO specific error
-        }
+        let nfts_vec = LinkageContract::add_nft_to_list(
+            result,
+            &nft,
+            &contract_addr,
+            &token_id,
+            "NFT by owner",
+        )?;
+
+        // let nfts_vec = match result {
+        //     Some(mut nfts) => {
+        //         if nfts.contains(&nft.clone()) {
+        //             return Err(ContractError::AlreadyExists(format!(
+        //                 "NFT already exists on NFT by owner list: {}:{}",
+        //                 contract_addr, token_id
+        //             )));
+        //         }
+        //         nfts.push(nft.clone());
+        //         nfts
+        //     }
+        //     None => {
+        //         vec![nft.clone()]
+        //     }
+        // };
+
+        self.nfts_by_owner
+            .save(storage, entry.sender.clone(), &nfts_vec)
+            .map_err(|e| {
+                ContractError::StorageError(
+                    format!("Save NFT by owner: {}:{}", contract_addr, token_id),
+                    e,
+                )
+            })?;
+
+        let result = self
+            .nfts_by_did
+            .may_load(storage, entry.did.clone())
+            .map_err(|e| {
+                ContractError::StorageError(
+                    format!("Load NFT by did for: {}:{}", contract_addr, token_id),
+                    e,
+                )
+            })?;
+
+        let nfts_vec = LinkageContract::add_nft_to_list(
+            result,
+            &nft,
+            &contract_addr,
+            &token_id,
+            "NFT by did",
+        )?;
+
+        self.nfts_by_did
+            .save(storage, entry.did.clone(), &nfts_vec)
+            .map_err(|e| {
+                ContractError::StorageError(
+                    format!("Save NFT by did: {}:{}", contract_addr, token_id),
+                    e,
+                )
+            })?;
+
+        // match result {
+        //     Ok(result) => {
+        //         let nfts_vec = match result {
+        //             Some(mut nfts) => {
+        //                 nfts.push(nft.clone());
+        //                 nfts
+        //             }
+        //             None => {
+        //                 vec![nft.clone()]
+        //             }
+        //         };
+        //         let result = self.nfts_by_did.save(storage, entry.did.clone(), &nfts_vec);
+        //         if let Err(e) = result {
+        //             return Err(ContractError::LinkageContractError(e)); //  TODO specific error
+        //         }
+        //     }
+        //     Err(e) => return Err(ContractError::LinkageContractError(e)), //  TODO specific error
+        // }
 
         Ok(())
+    }
+
+    fn add_nft_to_list(
+        result: Option<Vec<Nft>>,
+        nft: &Nft,
+        contract_addr: &Addr,
+        token_id: &String,
+        list_name: &str,
+    ) -> Result<Vec<Nft>, ContractError> {
+        let nfts_vec = match result {
+            Some(mut nfts) => {
+                if nfts.contains(&nft.clone()) {
+                    return Err(ContractError::AlreadyExists(format!(
+                        "NFT already exists on {} list: {}:{}",
+                        list_name, contract_addr, token_id
+                    )));
+                }
+                nfts.push(nft.clone());
+                nfts
+            }
+            None => {
+                vec![nft.clone()]
+            }
+        };
+        Ok(nfts_vec)
+    }
+
+    fn remove_nft_from_list(
+        result: Option<Vec<Nft>>,
+        contract_addr: &Addr,
+        token_id: &String,
+        list_name: &str,
+    ) -> Result<Vec<Nft>, ContractError> {
+        let nfts_vec = match result {
+            Some(mut nfts) => {
+                let pos = nfts
+                    .iter()
+                    .position(|x| x.token_id.eq(token_id) && x.contract_address.eq(&contract_addr));
+                match pos {
+                    Some(pos) => nfts.remove(pos),
+                    None => {
+                        return Err(ContractError::NotFound(format!(
+                            "NFT not found: {}:{}",
+                            contract_addr, token_id
+                        )))
+                    }
+                };
+                nfts
+            }
+            None => {
+                return Err(ContractError::NotFound(format!(
+                    "{} not found: {}:{}",
+                    list_name, contract_addr, token_id
+                )));
+            }
+        };
+        Ok(nfts_vec)
     }
 
     fn remove_nft_linkage(
@@ -495,67 +638,133 @@ impl LinkageContract {
         token_id: String,
         entry: &NftLockEntry,
     ) -> Result<(), ContractError> {
-        let result = self.nfts_by_owner.may_load(storage, entry.sender.clone());
-        match result {
-            Ok(result) => {
-                let nfts_vec = match result {
-                    Some(mut nfts) => {
-                        let pos = nfts.iter().position(|x| {
-                            x.token_id.eq(&token_id) && x.contract_address.eq(&contract_addr)
-                        });
-                        match pos {
-                            Some(pos) => nfts.remove(pos),
-                            None => return Err(ContractError::NotFound), //  TODO specific error
-                        };
-                        nfts
-                    }
-                    None => {
-                        return Err(ContractError::NotFound); //  TODO specific error
-                    }
-                };
-                if nfts_vec.is_empty() {
-                    self.nfts_by_owner.remove(storage, entry.sender.clone());
-                } else {
-                    let result = self
-                        .nfts_by_owner
-                        .save(storage, entry.sender.clone(), &nfts_vec);
-                    if let Err(e) = result {
-                        return Err(ContractError::LinkageContractError(e)); //  TODO specific error
-                    }
-                }
-            }
-            Err(e) => return Err(ContractError::LinkageContractError(e)), //  TODO specific error
-        }
+        let result = self
+            .nfts_by_owner
+            .may_load(storage, entry.sender.clone())
+            .map_err(|e| {
+                ContractError::StorageError(
+                    format!(
+                        "Load NFT by owner: {}:{}",
+                        contract_addr.clone(),
+                        token_id.clone()
+                    ),
+                    e,
+                )
+            })?;
 
-        let result = self.nfts_by_did.may_load(storage, entry.did.clone());
-        match result {
-            Ok(result) => {
-                let nfts_vec = match result {
-                    Some(mut nfts) => {
-                        let pos = nfts.iter().position(|x| {
-                            x.token_id.eq(&token_id) && x.contract_address.eq(&contract_addr)
-                        });
-                        match pos {
-                            Some(pos) => nfts.remove(pos),
-                            None => return Err(ContractError::NotFound), //  TODO specific error
-                        };
-                        nfts
-                    }
-                    None => {
-                        return Err(ContractError::NotFound); //  TODO specific error
-                    }
-                };
-                if nfts_vec.is_empty() {
-                    self.nfts_by_did.remove(storage, entry.did.clone());
-                } else {
-                    let result = self.nfts_by_did.save(storage, entry.did.clone(), &nfts_vec);
-                    if let Err(e) = result {
-                        return Err(ContractError::LinkageContractError(e)); //  TODO specific error
-                    }
-                }
-            }
-            Err(e) => return Err(ContractError::LinkageContractError(e)), //  TODO specific error
+        let nfts_vec = LinkageContract::remove_nft_from_list(
+            result,
+            &contract_addr,
+            &token_id,
+            "NFTs by owner",
+        )?;
+        // match result {
+        //     Ok(result) => {
+        // let nfts_vec = match result {
+        //     Some(mut nfts) => {
+        //         let pos = nfts.iter().position(|x| {
+        //             x.token_id.eq(&token_id) && x.contract_address.eq(&contract_addr)
+        //         });
+        //         match pos {
+        //             Some(pos) => nfts.remove(pos),
+        //             None => {
+        //                 return Err(ContractError::NotFound(format!(
+        //                     "NFT not found: {}:{}",
+        //                     contract_addr, token_id
+        //                 )))
+        //             }
+        //         };
+        //         nfts
+        //     }
+        //     None => {
+        //         return Err(ContractError::NotFound(format!(
+        //             "NFTs by owner not found: {}:{}",
+        //             contract_addr, token_id
+        //         )));
+        //     }
+        // };
+        if nfts_vec.is_empty() {
+            self.nfts_by_owner.remove(storage, entry.sender.clone());
+        } else {
+            self.nfts_by_owner
+                .save(storage, entry.sender.clone(), &nfts_vec)
+                .map_err(|e| {
+                    ContractError::StorageError(
+                        format!(
+                            "Save NFT by owner: {}:{}",
+                            contract_addr.clone(),
+                            token_id.clone()
+                        ),
+                        e,
+                    )
+                })?;
+            // if let Err(e) = result {
+            //     return Err(ContractError::LinkageContractError(e)); //  TODO specific error
+            // }
         }
+        //     }
+        //     Err(e) => return Err(ContractError::LinkageContractError(e)), //  TODO specific error
+        // }
+        // --------
+        let result = self
+            .nfts_by_did
+            .may_load(storage, entry.did.clone())
+            .map_err(|e| {
+                ContractError::StorageError(
+                    format!(
+                        "Load NFT by did: {}:{}",
+                        contract_addr.clone(),
+                        token_id.clone()
+                    ),
+                    e,
+                )
+            })?;
+
+        let nfts_vec = LinkageContract::remove_nft_from_list(
+            result,
+            &contract_addr,
+            &token_id,
+            "NFTs by did",
+        )?;
+        // match result {
+        //     Ok(result) => {
+        //         let nfts_vec = match result {
+        //             Some(mut nfts) => {
+        //                 let pos = nfts.iter().position(|x| {
+        //                     x.token_id.eq(&token_id) && x.contract_address.eq(&contract_addr)
+        //                 });
+        //                 match pos {
+        //                     Some(pos) => nfts.remove(pos),
+        //                     None => return Err(ContractError::NotFound), //  TODO specific error
+        //                 };
+        //                 nfts
+        //             }
+        //             None => {
+        //                 return Err(ContractError::NotFound); //  TODO specific error
+        //             }
+        //         };
+        if nfts_vec.is_empty() {
+            self.nfts_by_did.remove(storage, entry.did.clone());
+        } else {
+            self.nfts_by_did
+                .save(storage, entry.did.clone(), &nfts_vec)
+                .map_err(|e| {
+                    ContractError::StorageError(
+                        format!(
+                            "Save NFT by did: {}:{}",
+                            contract_addr.clone(),
+                            token_id.clone()
+                        ),
+                        e,
+                    )
+                })?;
+            // if let Err(e) = result {
+            //     return Err(ContractError::LinkageContractError(e)); //  TODO specific error
+            // }
+        }
+        //     }
+        //     Err(e) => return Err(ContractError::LinkageContractError(e)), //  TODO specific error
+        // }
 
         self.locked_nfts
             .remove(storage, (contract_addr.clone(), token_id.clone()));
@@ -602,6 +811,18 @@ impl LinkageContract {
 
     fn is_sender(&self, sender: &Addr, nft: &NftLockEntry) -> bool {
         sender.eq(&nft.sender)
+    }
+
+    fn authorize_admin_or_sender(
+        &self,
+        deps: Deps,
+        sender: &Addr,
+        nft: &NftLockEntry,
+    ) -> Result<(), ContractError> {
+        if !self.is_admin(deps, sender)? {
+            self.authorize_sender(sender, &nft)?
+        }
+        Ok(())
     }
 
     fn authorize_sender(&self, sender: &Addr, nft: &NftLockEntry) -> Result<(), ContractError> {
@@ -656,14 +877,25 @@ impl LinkageContract {
         }
     }
 
-    fn ensure_valid_did(&self, msg: Binary) -> Result<String, ContractError> {
+    fn ensure_valid_did(&self, msg: Binary) -> Result<Did, ContractError> {
         let bytes = msg.to_vec();
-        String::from_utf8(bytes).map_err(|e| ContractError::DidInvalid(e))
+        let did = String::from_utf8(bytes).map_err(|e| ContractError::DidMsgInvalid(e))?;
+        let did = Did::from(&did);
+        did.ensure_valid()
+            .map_err(|e| ContractError::DidInvalid(e))?;
+        Ok(did)
     }
 
     fn ensure_one_admin(&self, admins: &Vec<Addr>) -> Result<(), ContractError> {
         if admins.is_empty() {
             return Err(ContractError::NoAdmin);
+        }
+        Ok(())
+    }
+
+    fn ensure_token_id(&self, token_id: &str) -> Result<(), ContractError> {
+        if token_id.is_empty() {
+            return Err(ContractError::NoTokenId);
         }
         Ok(())
     }
@@ -678,6 +910,7 @@ mod tests {
     use cosmwasm_std::{to_json_binary, Addr, Binary, Empty, Response, StdResult};
     use cw721::{Cw721ExecuteMsg, Cw721QueryMsg};
     use cw_multi_test::{Contract, ContractWrapper, Executor, IntoAddr};
+    use did_contract::state::Did;
     use sylvia::multitest::App;
 
     #[test]
@@ -1321,7 +1554,7 @@ mod tests {
             .remove_authorized_nft_contract(auth_address.clone())
             .call(&owner);
         assert!(res.is_err(), "Expected Err, but got Ok");
-        assert_eq!("Admin not found", res.err().unwrap().to_string());
+        assert_eq!("NFT contract not found", res.err().unwrap().to_string());
 
         // Unauthorized user should not be able to remove a contract
         let unauthorized_user = "unauthorized_user".into_addr();
@@ -1525,11 +1758,11 @@ mod tests {
             contract_address: auth_address.clone(),
             token_id: token_id.clone(),
             sender: sender.clone(),
-            did: String::from_utf8(msg.to_vec()).unwrap(),
+            did: Did::new(&String::from_utf8(msg.to_vec()).unwrap()),
         };
         assert_eq!(expcted_nft.clone(), result.unwrap());
 
-        let result = contract.get_locked_nfts_by_did(did.to_string());
+        let result = contract.get_locked_nfts_by_did(Did::new(&did));
         assert!(result.is_ok(), "Expected Ok, but go an Err");
         let result = result.unwrap();
         assert_eq!(result.len(), 1);
@@ -1572,11 +1805,11 @@ mod tests {
             contract_address: auth_address.clone(),
             token_id: token_id_2.clone(),
             sender: sender.clone(),
-            did: String::from_utf8(msg.to_vec()).unwrap(),
+            did: Did::new(&String::from_utf8(msg.to_vec()).unwrap()),
         };
         assert_eq!(expcted_nft_2.clone(), result.unwrap());
 
-        let result = contract.get_locked_nfts_by_did(did.to_string());
+        let result = contract.get_locked_nfts_by_did(Did::new(&did));
         assert!(result.is_ok(), "Expected Ok, but go an Err");
         let result = result.unwrap();
         assert_eq!(result.len(), 2);
@@ -1649,11 +1882,11 @@ mod tests {
             contract_address: cw721_base_contract_addr.clone(),
             token_id: token_id_2.clone(),
             sender: sender.clone(),
-            did: String::from_utf8(msg.to_vec()).unwrap(),
+            did: Did::new(&String::from_utf8(msg.to_vec()).unwrap()),
         };
         assert_eq!(expcted_nft_2.clone(), result.unwrap());
 
-        let result = linkage_contract.get_locked_nfts_by_did(did.to_string());
+        let result = linkage_contract.get_locked_nfts_by_did(Did::new(&did));
         assert!(result.is_ok(), "Expected Ok, but go an Err");
         let result = result.unwrap();
         assert_eq!(result.len(), 1);

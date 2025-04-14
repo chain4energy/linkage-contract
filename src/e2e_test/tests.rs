@@ -5,6 +5,7 @@ use cosmrs::{crypto::secp256k1::SigningKey, proto::cosmos::bank::v1beta1::QueryB
 use cosmwasm_std::{to_base64, Addr, Binary, Coin, Decimal};
 use cw721::{Cw721, Cw721ExecuteMsg, Cw721Query, Cw721QueryMsg};
 use cw721_base::{ExecuteMsg, QueryMsg};
+use did_contract::state::Did;
 use serde_json::json;
 use serial_test::serial;
 use e2e_test_suite::{derive_private_key_from_mnemonic, error::CosmError, ContractInit, ADDR_PREFIX};
@@ -177,7 +178,7 @@ fn test_full_linkage_process() {
     println!("NftLockEntry: {resp}");
     let nft_lock_entry: NftLockEntryResponse = serde_json::from_slice(&result.data).expect("Get NftLockedEntry response deserialization error");
     let expected_nft_lock_entry = NftLockEntryResponse{ 
-        did: "did_1233".to_string(),
+        did: Did::new(&"did_1233"),
         sender: Addr::unchecked(contract_admin_address.clone()),
         contract_address: Addr::unchecked(cw721_base_contract_address.clone()),
         token_id: token_id.clone()
@@ -188,7 +189,7 @@ fn test_full_linkage_process() {
 
     // ------ Get locked NFTs by DID
 
-    let query_msg = super::super::contract::sv::QueryMsg::GetLockedNftsByDid { did: "did_1233".to_string() };
+    let query_msg = super::super::contract::sv::QueryMsg::GetLockedNftsByDid { did: Did::new(&"did_1233") };
     let msg = json!(query_msg).to_string();
     let result = context.get_chain_client().query.wasm().contract(&linkage_contract_address.clone(), &msg);
     assert!(result.is_ok(), "Expected OK, but got an Err");
@@ -198,7 +199,7 @@ fn test_full_linkage_process() {
     println!("NftLockEntry: {resp}");
     let nft_lock_entry: Vec<NftLockEntryResponse> = serde_json::from_slice(&result.data).expect("Get NftLockedEntry response deserialization error");
     let expected_nft_lock_entry = vec![NftLockEntryResponse{ 
-        did: "did_1233".to_string(),
+        did: Did::new(&"did_1233"),
         sender: Addr::unchecked(contract_admin_address.clone()),
         contract_address: Addr::unchecked(cw721_base_contract_address.clone()),
         token_id: token_id.clone()
@@ -219,7 +220,7 @@ fn test_full_linkage_process() {
     println!("NftLockEntry: {resp}");
     let nft_lock_entry: Vec<NftLockEntryResponse> = serde_json::from_slice(&result.data).expect("Get NftLockedEntry response deserialization error");
     let expected_nft_lock_entry = vec![NftLockEntryResponse{ 
-        did: "did_1233".to_string(),
+        did: Did::new(&"did_1233"),
         sender: Addr::unchecked(contract_admin_address.clone()),
         contract_address: Addr::unchecked(cw721_base_contract_address.clone()),
         token_id: token_id.clone()

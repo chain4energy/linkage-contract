@@ -11,6 +11,9 @@ pub enum ContractError {
     #[error("Linkage contract error: {0}")]
     LinkageContractError(StdError),
 
+    // #[error("Load nfts by owner error: {0}: {1}")]
+    // LoadNftsByOwnerError(String, StdError),
+
     #[error("Storage error: {0}: {1}")]
     StorageError(String, StdError),
 
@@ -20,11 +23,14 @@ pub enum ContractError {
     #[error("Invalid contract address: {0}")]
     InvalidContractAddress(StdError),
 
-    #[error("Not found")]
-    NotFound,
+    #[error("Not found: {0}")]
+    NotFound(String),
 
     #[error("Unauthorized")]
     Unauthorized(),
+
+    #[error("Invalid input: {0}")]
+    InvalidInput(String),
 
     #[error("Unauthorized contract error")]
     UnauthorizedContractError,
@@ -44,12 +50,18 @@ pub enum ContractError {
     #[error("NFT contract already exists")]
     NftContractAlreadyExists(),
 
-    #[error("Did Invalid")]
-    DidInvalid(FromUtf8Error),
+    #[error("Did Invalid: {0}")]
+    DidMsgInvalid(FromUtf8Error),
 
     #[error("AlreadyExists: {0}")]
     AlreadyExists(String),
 
     #[error("At least one contract admin is required")]
     NoAdmin,
+
+    #[error("Token id is required")]
+    NoTokenId,
+
+    #[error("Token id is required: {0}")]
+    DidInvalid(did_contract::error::ContractError),
 }

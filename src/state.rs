@@ -1,4 +1,5 @@
 use cosmwasm_std::Addr;
+use did_contract::state::Did;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -11,5 +12,5 @@ pub struct Nft {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct NftLockEntry {
     pub sender: Addr,
-    pub did: String,
+    pub did: Did,
 }

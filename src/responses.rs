@@ -14,5 +14,5 @@ pub struct NftLockEntryResponse {
     pub contract_address: Addr,
     pub token_id: String,
     pub sender: Addr,
-    pub did: String,
+    pub did: did_contract::state::Did,
 }
