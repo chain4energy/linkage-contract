@@ -274,7 +274,7 @@ fn test_unlock_nft_unauthorized() {
     assert!(result.is_err(), "Expected Err, but got Ok");
     assert_eq!(
         result.unwrap_err().to_string(),
-        "Unauthorized"
+        "Unauthorized: Sender is not the owner of the NFT"
     );
 }
 
@@ -326,6 +326,52 @@ fn test_unlock_nft_invalid_contract_address() {
     let sender = "sender_address".into_addr();
     let token_id = "token_id".to_string();
     let invalid_address = Addr::unchecked("invalid_contract");
+    let did = format!("{}address", DID_PREFIX);
+    let msg = Binary::new(did.as_bytes().to_vec());
+
+    let cw721_base_contract = app.app_mut().instantiate_contract(
+        cw721_base_code_id,
+        admin.clone(),
+        &Binary::default(),
+        &[],
+        "label",
+        None,
+    );
+
+    let cw721_base_contract_addr = cw721_base_contract.unwrap();
+
+    let contract = linkage_code_id
+        .instantiate(vec![admin.clone()], vec![cw721_base_contract_addr.clone()])
+        .call(&admin)
+        .unwrap();
+
+    // Lock the NFT
+    let result = contract
+        .receive_nft(sender.clone(), token_id.clone(), msg)
+        .call(&cw721_base_contract_addr);
+    assert!(result.is_ok(), "Expected Ok, but got Err");
+
+    // Attempt to unlock the NFT with an invalid contract address
+    let result = contract
+        .unlock_nft(invalid_address.clone(), token_id.clone())
+        .call(&sender);
+    assert!(result.is_err(), "Expected Err, but got Ok");
+    assert_eq!(
+        result.unwrap_err().to_string(),
+         "Invalid contract address: Generic error: Error decoding bech32"
+    );
+}
+
+
+#[test]
+fn test_unlock_nft_invalid_contract_address_unauthorized() {
+    let app = App::default();
+    let linkage_code_id = CodeId::store_code(&app);
+    let cw721_base_code_id = app.app_mut().store_code(cw721_base_contract_mock());
+    let admin = "admin".into_addr();
+    let sender = "sender_address".into_addr();
+    let token_id = "token_id".to_string();
+    let invalid_address = "invalid_contract".into_addr();
     let did = format!("{}address", DID_PREFIX);
     let msg = Binary::new(did.as_bytes().to_vec());
 

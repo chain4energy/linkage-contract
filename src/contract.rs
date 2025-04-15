@@ -214,7 +214,7 @@ impl LinkageContract {
         token_id: String,
         msg: Binary,
     ) -> Result<Response, ContractError> {
-        let did = self.ensure_valid_did(msg)?;
+        let did = self.ensure_valid_did_msg(msg)?;
         self.ensure_valid_contract_addr(ctx.deps.api, &ctx.info.sender)?;
         self.ensure_token_id(&token_id)?;
         self.authorize_contract(ctx.deps.as_ref(), &ctx.info.sender)?;
@@ -349,7 +349,8 @@ impl LinkageContract {
         contract_address: Addr,
         token_id: String,
     ) -> Result<NftLockEntryResponse, ContractError> {
-        let cloned_token_id = token_id.clone();
+        self.ensure_valid_contract_addr(ctx.deps.api, &contract_address)?;
+        self.ensure_token_id(&token_id)?;
         let result = self.locked_nfts.may_load(
             ctx.deps.storage,
             (contract_address.clone(), token_id.clone()),
@@ -368,7 +369,7 @@ impl LinkageContract {
         let nft = result.unwrap();
         Ok(NftLockEntryResponse {
             contract_address,
-            token_id: cloned_token_id,
+            token_id: token_id.clone(),
             sender: nft.sender,
             did: nft.did,
         })
@@ -391,6 +392,7 @@ impl LinkageContract {
         ctx: QueryCtx,
         did: Did,
     ) -> Result<Vec<NftLockEntryResponse>, ContractError> {
+        self.ensure_valid_did(&did)?;
         let nfts_by_did = self.nfts_by_did.may_load(ctx.deps.storage, did.clone())?;
         if nfts_by_did.is_none() {
             return Ok(vec![]);
@@ -425,6 +427,7 @@ impl LinkageContract {
         ctx: QueryCtx,
         owner: Addr,
     ) -> Result<Vec<NftLockEntryResponse>, ContractError> {
+        self.ensure_valid_address(ctx.deps.api, &owner)?;
         let nfts_by_owner = self
             .nfts_by_owner
             .may_load(ctx.deps.storage, owner.clone())?;
@@ -866,6 +869,11 @@ impl LinkageContract {
             .map_err(|e| ContractError::InvalidAdminAddress(e))
     }
 
+    fn ensure_valid_address(&self, api: &dyn Api, admin: &Addr) -> Result<Addr, ContractError> {
+        api.addr_validate(admin.as_str())
+            .map_err(|e| ContractError::InvalidAddress(e))
+    }
+
     fn ensure_unique_admins(
         &self,
         admins: &Vec<Addr>,
@@ -899,13 +907,18 @@ impl LinkageContract {
         }
     }
 
-    fn ensure_valid_did(&self, msg: Binary) -> Result<Did, ContractError> {
+    fn ensure_valid_did_msg(&self, msg: Binary) -> Result<Did, ContractError> {
         let bytes = msg.to_vec();
         let did = String::from_utf8(bytes).map_err(|e| ContractError::DidMsgInvalid(e))?;
         let did = Did::from(&did);
+        self.ensure_valid_did(&did)?;
+        Ok(did)
+    }
+
+    fn ensure_valid_did(&self, did: &Did) -> Result<(), ContractError> {
         did.ensure_valid()
             .map_err(|e| ContractError::DidInvalid(e))?;
-        Ok(did)
+        Ok(())
     }
 
     fn ensure_one_admin(&self, admins: &Vec<Addr>) -> Result<(), ContractError> {

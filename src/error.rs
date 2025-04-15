@@ -20,6 +20,9 @@ pub enum ContractError {
     #[error("Invalid admin address: {0}")]
     InvalidAdminAddress(StdError),
 
+    #[error("Invalid address: {0}")]
+    InvalidAddress(StdError),
+
     #[error("Invalid contract address: {0}")]
     InvalidContractAddress(StdError),
 
@@ -62,6 +65,6 @@ pub enum ContractError {
     #[error("Token id is required")]
     NoTokenId,
 
-    #[error("Token id is required: {0}")]
+    #[error("Did invalid: {0}")]
     DidInvalid(did_contract::error::ContractError),
 }
