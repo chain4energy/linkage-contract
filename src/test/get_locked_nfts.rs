@@ -1,13 +1,9 @@
 
 use crate::contract::sv::mt::{CodeId, LinkageContractProxy};
-use crate::error::ContractError;
-use crate::responses::NftLockEntryResponse;
-use cosmwasm_std::{to_json_binary, Addr, Binary, Empty, Response, StdResult};
-use cw721::{Cw721ExecuteMsg, Cw721QueryMsg};
-use cw_multi_test::{Contract, ContractWrapper, Executor, IntoAddr};
-use did_contract::state::Did;
+use cosmwasm_std::{Addr, Binary};
+use cw_multi_test::{Executor, IntoAddr};
 use sylvia::multitest::App;
-use did_contract::state::{DID_PREFIX};
+use did_contract::state::{Did, DID_PREFIX};
 use crate::test::nft_unlock::cw721_base_contract_mock;
 
 #[test]
@@ -140,7 +136,6 @@ fn test_get_locked_nft_invalid_token_id() {
     let linkage_code_id = CodeId::store_code(&app);
     let cw721_base_code_id = app.app_mut().store_code(cw721_base_contract_mock());
     let admin = "admin".into_addr();
-    let sender = "sender_address".into_addr();
     let token_id = "".to_string();
     // let invalid_address = Addr::from("invalid_contract");
     let did = format!("{}address", DID_PREFIX);

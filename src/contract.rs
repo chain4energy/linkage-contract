@@ -1,5 +1,3 @@
-use std::result;
-
 use crate::error::ContractError;
 use crate::responses::NftLockEntryResponse;
 use crate::state::{Nft, NftLockEntry};

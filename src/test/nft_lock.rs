@@ -1,9 +1,8 @@
 use crate::contract::sv::mt::{CodeId, LinkageContractProxy};
 use crate::error::ContractError;
 use crate::responses::NftLockEntryResponse;
-use cosmwasm_std::{to_json_binary, Addr, Binary, Empty, Response, StdResult};
-use cw721::{Cw721ExecuteMsg, Cw721QueryMsg};
-use cw_multi_test::{Contract, ContractWrapper, Executor, IntoAddr};
+use cosmwasm_std::{Addr, Binary};
+use cw_multi_test::IntoAddr;
 use did_contract::state::{Did, DID_PREFIX};
 use sylvia::multitest::App;
 
