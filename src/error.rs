@@ -26,14 +26,14 @@ pub enum ContractError {
     #[error("Not found: {0}")]
     NotFound(String),
 
-    #[error("Unauthorized")]
-    Unauthorized(),
+    #[error("Unauthorized: {0}")]
+    Unauthorized(String),
 
     #[error("Invalid input: {0}")]
     InvalidInput(String),
 
-    #[error("Unauthorized contract error")]
-    UnauthorizedContractError,
+    // #[error("Unauthorized contract error")]
+    // UnauthorizedContractError,
 
     #[error("Not found error")]
     NotFoundContractError,

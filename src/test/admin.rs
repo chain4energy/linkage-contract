@@ -63,7 +63,7 @@ fn test_add_admin() {
     let res = contract.add_admin(admin2.to_string()).call(&non_admin1);
 
     assert!(res.is_err(), "Expected Err, but got an Ok");
-    assert_eq!("Unauthorized", res.err().unwrap().to_string());
+    assert_eq!("Unauthorized: Sender is not an admin", res.err().unwrap().to_string());
 
     let admin3 = "admin3".into_addr();
 
@@ -219,7 +219,7 @@ fn test_remove_admin() {
         .call(&unauthorized_user);
 
     assert!(res.is_err(), "Expected Err, but got an Ok");
-    assert_eq!("Unauthorized", res.err().unwrap().to_string());
+    assert_eq!("Unauthorized: Sender is not an admin", res.err().unwrap().to_string());
 }
 
 #[test]

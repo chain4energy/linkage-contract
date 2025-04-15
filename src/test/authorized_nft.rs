@@ -96,7 +96,7 @@ fn test_add_authorized_nft_contract() {
         .add_authorized_nft_contract(another_nft_contract.clone())
         .call(&unauthorized_user);
     assert!(res.is_err(), "Expected Err, but got Ok");
-    assert_eq!("Unauthorized", res.err().unwrap().to_string());
+    assert_eq!("Unauthorized: Sender is not an admin", res.err().unwrap().to_string());
 }
 
 #[test]
@@ -205,7 +205,7 @@ fn test_add_authorized_nft_contract_unauthorized() {
     assert!(res.is_err(), "Expected Err, but got Ok");
     assert_eq!(
         res.err().unwrap().to_string(),
-        "Unauthorized",
+        "Unauthorized: Sender is not an admin",
         "Expected 'Unauthorized' error"
     );
 }
@@ -262,7 +262,7 @@ fn test_remove_authorized_nft_contract() {
         .remove_authorized_nft_contract(auth_address.clone())
         .call(&unauthorized_user);
     assert!(res.is_err(), "Expected Err, but got Ok");
-    assert_eq!("Unauthorized", res.err().unwrap().to_string());
+    assert_eq!("Unauthorized: Sender is not an admin", res.err().unwrap().to_string());
 }
 
 #[test]
@@ -312,7 +312,7 @@ fn test_remove_authorized_nft_contract_unauthorized() {
     assert!(res.is_err(), "Expected Err, but got Ok");
     assert_eq!(
         res.err().unwrap().to_string(),
-        "Unauthorized",
+        "Unauthorized: Sender is not an admin",
         "Expected 'Unauthorized' error"
     );
 }

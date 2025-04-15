@@ -75,7 +75,7 @@ fn receive_nft_and_get_locked_nfts() {
 
     assert_eq!(
         result.unwrap_err(),
-        ContractError::UnauthorizedContractError
+        ContractError::Unauthorized("Contract is not authorized".to_string())
     );
 
     let result = contract.get_locked_nft(unauth_address, token_id_2.clone());
@@ -164,7 +164,7 @@ fn test_receive_nft_success() {
     assert_eq!(res.events[2].attributes[0].key, "_contract_address");
     assert_eq!(res.events[2].attributes[0].value, "cosmwasm1mzdhwvvh22wrt07w59wxyd58822qavwkx5lcej7aqfkpqqlhaqfsgn6fq2");
     assert_eq!(res.events[2].attributes[1].key, "executor");
-    assert_eq!(res.events[2].attributes[1].value, "cosmwasm1dfannzw0pjczc5wlth2zek3lzdwvxmrh9uvpmw40jgakkds2sm4qle8aws");
+    assert_eq!(res.events[2].attributes[1].value, auth_address.as_str());
     assert_eq!(res.events[2].attributes[2].key, "sender");
     assert_eq!(res.events[2].attributes[2].value, sender.to_string());
 
@@ -200,7 +200,7 @@ fn test_receive_nft_unauthorized_contract() {
     assert!(result.is_err(), "Expected Err, but got Ok");
     assert_eq!(
         result.unwrap_err(),
-        ContractError::UnauthorizedContractError
+        ContractError::Unauthorized("Contract is not authorized".to_string())
     );
 }
 
