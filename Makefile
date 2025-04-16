@@ -20,6 +20,7 @@ optimize:
 	sudo chown -R $$(id -u):$$(id -g) ./artifacts
 
 
+
 optimize-nft-contract:
 	@echo "!!!!!!! NOTE: for production use only intel porcessor, so no Mac M1 - see https://github.com/CosmWasm/optimizer"
 # CosmWasm Rust Optimizer
@@ -107,7 +108,7 @@ expand:
 	-mkdir .expand
 	cargo expand > .expand/expand.rs
 
-update_git_dependencies:
+update_cargo_dependencies:
 	cargo update
 # cargo update -p docker-controller
 # cargo update -p cosm-client

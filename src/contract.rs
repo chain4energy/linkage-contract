@@ -2,7 +2,7 @@ use crate::error::ContractError;
 use crate::responses::NftLockEntryResponse;
 use crate::state::{Nft, NftLockEntry};
 use cosmwasm_std::{
-    to_json_binary, to_json_string, Addr, Api, Binary, Deps, Event, Response, Storage, SubMsg,
+    to_json_binary, to_json_string, Addr, Api, Binary, Deps, Event, Response, Storage,
     SubMsgResult, WasmMsg,
 };
 use cw_storage_plus::{Item, Map};
@@ -291,6 +291,8 @@ impl LinkageContract {
             &nft,
         )?;
 
+        // let exec_msg = cw721::Cw721ExecuteMsg::TransferNft { recipient: ctx.info.sender.to_string(), token_id: token_id.clone() };
+
         let exec_msg = Cw721ExecuteMsg {
             transfer_nft: TransferNftMsg {
                 recipient: ctx.info.sender.to_string(),
@@ -304,7 +306,7 @@ impl LinkageContract {
             funds: vec![],
         };
 
-        let sub_msg = SubMsg::reply_on_error(msg, 1u64);
+        // let sub_msg = SubMsg::reply_on_error(msg, 1u64);
 
         let event = Event::new("unlock_nft")
             .add_attribute("executor", ctx.info.sender.as_str())
@@ -318,7 +320,8 @@ impl LinkageContract {
             .add_attribute("token_id", token_id.clone())
             .add_attribute("did", nft.did.clone())
             .add_event(event)
-            .add_submessage(sub_msg))
+            .add_message(msg))
+            // .add_submessage(sub_msg))
         //     }
         //     Err(e) => Err(ContractError::LinkageContractError(e)),
         // }
