@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use crate::error::ContractError;
 use crate::responses::NftLockEntryResponse;
 use crate::state::{Nft, NftLockEntry};
@@ -58,6 +60,14 @@ impl LinkageContract {
         authorized_nft_contracts: Vec<Addr>,
     ) -> Result<Response, ContractError> {
         self.ensure_one_admin(&admins)?;
+        self.ensure_admin_not_duplicated(&admins)?;
+        self.ensure_authorized_contract_not_duplicated(&authorized_nft_contracts)?;
+        for admin in &admins {
+            self.ensure_valid_admin(ctx.deps.api, &admin.to_string())?;
+        }
+        for contract in &authorized_nft_contracts {
+            self.ensure_valid_contract_addr(ctx.deps.api, &contract)?;
+        }
         self.save_admins(ctx.deps.storage, &admins)?;
         self.save_authorized_nft_contracts(ctx.deps.storage, &authorized_nft_contracts)?;
         Ok(Response::default())
@@ -932,6 +942,26 @@ impl LinkageContract {
     fn ensure_token_id(&self, token_id: &str) -> Result<(), ContractError> {
         if token_id.is_empty() {
             return Err(ContractError::NoTokenId);
+        }
+        Ok(())
+    }
+
+    fn ensure_admin_not_duplicated(&self, admins: &Vec<Addr>) -> Result<(), ContractError> {
+        let mut seen = HashSet::new();
+        for admin in admins {
+            if !seen.insert(admin.to_string()) {
+                return Err(ContractError::DuplicatedAdmin(admin.to_string()));
+            }
+        }
+        Ok(())
+    }
+
+    fn ensure_authorized_contract_not_duplicated(&self, contracts: &Vec<Addr>) -> Result<(), ContractError> {
+        let mut seen = HashSet::new();
+        for contact in contracts {
+            if !seen.insert(contact.to_string()) {
+                return Err(ContractError::DuplicatedContract(contact.to_string()));
+            }
         }
         Ok(())
     }

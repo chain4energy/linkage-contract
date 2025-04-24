@@ -1,5 +1,6 @@
 
 use crate::contract::sv::mt::{CodeId, LinkageContractProxy};
+use cosmwasm_std::Addr;
 use cw_multi_test::IntoAddr;
 use sylvia::multitest::App;
 
@@ -71,4 +72,74 @@ fn test_instantiate_with_empty_authorized_nft_contracts() {
         .get_authorized_nft_contracts()
         .expect("get_authorized_nft_contracts failed");
     assert_eq!(nft_contracts.len(), 0);
+}
+
+#[test]
+fn test_instantiate_with_duplicate_admins_should_fail() {
+    let app = App::default();
+    let code_id = CodeId::store_code(&app);
+
+    let admin = "admin".into_addr();
+
+    let contract_result = code_id
+        .instantiate(vec![admin.clone(), admin.clone()], vec![])
+        .call(&admin);
+    assert!(contract_result.is_err());
+    assert_eq!(
+        contract_result.unwrap_err().to_string(),
+        format!("Duplicated admin: {}", admin)
+    );
+}
+
+#[test]
+fn test_instantiate_with_invalid_admin_address_should_fail() {
+    let app = App::default();
+    let code_id = CodeId::store_code(&app);
+
+    let invalid_admin = Addr::unchecked("invalid_admin_address");
+
+    let contract_result = code_id
+        .instantiate(vec![invalid_admin.clone()], vec![])
+        .call(&invalid_admin);
+    assert!(contract_result.is_err());
+    assert_eq!(
+        contract_result.unwrap_err().to_string(),
+        "Invalid admin address: Generic error: Error decoding bech32"
+    );
+}
+
+#[test]
+fn test_instantiate_with_duplicate_authorized_nft_contracts_should_fail() {
+    let app = App::default();
+    let code_id = CodeId::store_code(&app);
+
+    let admin = "admin".into_addr();
+    let nft_contract = "nft_contract".into_addr();
+
+    let contract_result = code_id
+        .instantiate(vec![admin.clone()], vec![nft_contract.clone(), nft_contract.clone()])
+        .call(&admin);
+    assert!(contract_result.is_err());
+    assert_eq!(
+        contract_result.unwrap_err().to_string(),
+        format!("Duplicated contract: {}", nft_contract)
+    );
+}
+
+#[test]
+fn test_instantiate_with_invalid_nft_contract_address_should_fail() {
+    let app = App::default();
+    let code_id = CodeId::store_code(&app);
+
+    let admin = "admin".into_addr();
+    let invalid_nft_contract = Addr::unchecked("invalid_nft_contract");
+
+    let contract_result = code_id
+        .instantiate(vec![admin.clone()], vec![invalid_nft_contract.clone()])
+        .call(&admin);
+    assert!(contract_result.is_err());
+    assert_eq!(
+        contract_result.unwrap_err().to_string(),
+        "Invalid contract address: Generic error: Error decoding bech32"
+    );
 }

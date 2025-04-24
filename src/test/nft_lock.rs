@@ -296,13 +296,15 @@ fn test_receive_nft_invalid_contract_address() {
     let code_id = CodeId::store_code(&app);
     let admin = "admin".into_addr();
     let sender = "sender_address".into_addr();
+
+    let contract_address = "contract_address".into_addr();
     let token_id = "token_id".to_string();
     let did = format!("{}address", DID_PREFIX);
     let msg = Binary::from(did.as_bytes());
 
     let invalid_address = Addr::unchecked("invalid_address");
     let contract = code_id
-        .instantiate(vec![admin.clone()], vec![invalid_address.clone()])
+        .instantiate(vec![admin.clone()], vec![contract_address.clone()])
         .call(&admin)
         .unwrap();
 

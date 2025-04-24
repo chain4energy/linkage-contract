@@ -23,6 +23,12 @@ pub enum ContractError {
     #[error("Invalid address: {0}")]
     InvalidAddress(StdError),
 
+    #[error("Duplicated admin: {0}")]
+    DuplicatedAdmin(String),
+
+    #[error("Duplicated contract: {0}")]
+    DuplicatedContract(String),
+
     #[error("Invalid contract address: {0}")]
     InvalidContractAddress(StdError),
 
