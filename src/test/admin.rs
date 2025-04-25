@@ -1,4 +1,3 @@
-
 use crate::contract::sv::mt::{CodeId, LinkageContractProxy};
 use cw_multi_test::IntoAddr;
 use sylvia::multitest::App;
@@ -58,7 +57,10 @@ fn test_add_admin() {
     let res = contract.add_admin(admin2.to_string()).call(&non_admin1);
 
     assert!(res.is_err(), "Expected Err, but got an Ok");
-    assert_eq!("Unauthorized: Sender is not an admin", res.err().unwrap().to_string());
+    assert_eq!(
+        "Unauthorized: Sender is not an admin",
+        res.err().unwrap().to_string()
+    );
 
     let admin3 = "admin3".into_addr();
 
@@ -146,7 +148,6 @@ fn test_add_duplicate_admin() {
     );
 }
 
-
 #[test]
 fn test_add_admin_unauthorized() {
     let app = App::default();
@@ -163,10 +164,15 @@ fn test_add_admin_unauthorized() {
     let unauthorized_user = "unauthorized".into_addr();
 
     // Attempt to add an admin by an unauthorized user
-    let res = escrow_contract.add_admin(admin1.to_string()).call(&unauthorized_user);
+    let res = escrow_contract
+        .add_admin(admin1.to_string())
+        .call(&unauthorized_user);
 
     assert!(res.is_err(), "Expected Err, but got an Ok");
-    assert_eq!("Unauthorized: Sender is not an admin", res.err().unwrap().to_string());
+    assert_eq!(
+        "Unauthorized: Sender is not an admin",
+        res.err().unwrap().to_string()
+    );
 }
 
 #[test]
@@ -237,7 +243,10 @@ fn test_remove_admin() {
         .call(&unauthorized_user);
 
     assert!(res.is_err(), "Expected Err, but got an Ok");
-    assert_eq!("Unauthorized: Sender is not an admin", res.err().unwrap().to_string());
+    assert_eq!(
+        "Unauthorized: Sender is not an admin",
+        res.err().unwrap().to_string()
+    );
 }
 
 #[test]
@@ -352,7 +361,9 @@ fn test_remove_admin_non_existent() {
     let non_existent_admin = "non_existent_admin".into_addr();
 
     // Attempt to remove a non-existent admin
-    let result = contract.remove_admin(non_existent_admin.to_string()).call(&owner);
+    let result = contract
+        .remove_admin(non_existent_admin.to_string())
+        .call(&owner);
 
     // Ensure the operation fails
     assert!(result.is_err(), "Expected Err, but got Ok");
@@ -380,7 +391,9 @@ fn test_remove_admin_invalid_format() {
     let invalid_admin_address = "invalid_admin_address"; // Invalid address format
 
     // Attempt to remove an admin with an invalid address format
-    let result = contract.remove_admin(invalid_admin_address.to_string()).call(&owner);
+    let result = contract
+        .remove_admin(invalid_admin_address.to_string())
+        .call(&owner);
 
     // Ensure the operation fails
     assert!(result.is_err(), "Expected Err, but got Ok");
