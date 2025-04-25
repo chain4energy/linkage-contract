@@ -146,6 +146,29 @@ fn test_add_duplicate_admin() {
     );
 }
 
+
+#[test]
+fn test_add_admin_unauthorized() {
+    let app = App::default();
+    let code_id = CodeId::store_code(&app);
+
+    let owner = "owner".into_addr();
+
+    let escrow_contract = code_id
+        .instantiate(vec![owner.clone()], vec![])
+        .call(&owner)
+        .unwrap();
+
+    let admin1 = "admin1".into_addr();
+    let unauthorized_user = "unauthorized".into_addr();
+
+    // Attempt to add an admin by an unauthorized user
+    let res = escrow_contract.add_admin(admin1.to_string()).call(&unauthorized_user);
+
+    assert!(res.is_err(), "Expected Err, but got an Ok");
+    assert_eq!("Unauthorized: Sender is not an admin", res.err().unwrap().to_string());
+}
+
 #[test]
 fn test_remove_admin() {
     let app = App::default();
@@ -273,6 +296,99 @@ fn test_remove_same_admin_twice() {
 
     assert!(result.is_err(), "Expected error on second removal");
     assert_eq!("Admin not found", result.unwrap_err().to_string());
+}
+
+#[test]
+fn test_remove_admin_unauthorized() {
+    let app = App::default();
+    let code_id = CodeId::store_code(&app);
+
+    let owner = "owner".into_addr();
+    let unauthorized_user = "unauthorized_user".into_addr();
+    let admin_to_remove = "admin_to_remove".into_addr();
+
+    let auth_address = "cw721_address".into_addr();
+
+    // Instantiate the contract with the owner as the initial admin
+    let contract = code_id
+        .instantiate(vec![owner.clone()], vec![auth_address.clone()])
+        .call(&owner)
+        .unwrap();
+
+    // Add an admin to remove later
+    contract
+        .add_admin(admin_to_remove.to_string())
+        .call(&owner)
+        .expect("error adding admin");
+
+    // Attempt to remove the admin by an unauthorized user
+    let result = contract
+        .remove_admin(admin_to_remove.to_string())
+        .call(&unauthorized_user);
+
+    // Ensure the operation fails
+    assert!(result.is_err(), "Expected Err, but got Ok");
+    assert_eq!(
+        result.unwrap_err().to_string(),
+        "Unauthorized: Sender is not an admin",
+        "Expected 'Unauthorized' error"
+    );
+}
+
+#[test]
+fn test_remove_admin_non_existent() {
+    let app = App::default();
+    let code_id = CodeId::store_code(&app);
+
+    let owner = "owner".into_addr();
+    let auth_address = "cw721_address".into_addr();
+
+    // Instantiate the contract with the owner as the initial admin
+    let contract = code_id
+        .instantiate(vec![owner.clone()], vec![auth_address.clone()])
+        .call(&owner)
+        .unwrap();
+
+    let non_existent_admin = "non_existent_admin".into_addr();
+
+    // Attempt to remove a non-existent admin
+    let result = contract.remove_admin(non_existent_admin.to_string()).call(&owner);
+
+    // Ensure the operation fails
+    assert!(result.is_err(), "Expected Err, but got Ok");
+    assert_eq!(
+        result.unwrap_err().to_string(),
+        "Admin not found",
+        "Expected 'Admin not found' error"
+    );
+}
+
+#[test]
+fn test_remove_admin_invalid_format() {
+    let app = App::default();
+    let code_id = CodeId::store_code(&app);
+
+    let owner = "owner".into_addr();
+    let auth_address = "cw721_address".into_addr();
+
+    // Instantiate the contract with the owner as the initial admin
+    let contract = code_id
+        .instantiate(vec![owner.clone()], vec![auth_address.clone()])
+        .call(&owner)
+        .unwrap();
+
+    let invalid_admin_address = "invalid_admin_address"; // Invalid address format
+
+    // Attempt to remove an admin with an invalid address format
+    let result = contract.remove_admin(invalid_admin_address.to_string()).call(&owner);
+
+    // Ensure the operation fails
+    assert!(result.is_err(), "Expected Err, but got Ok");
+    assert_eq!(
+        result.unwrap_err().to_string(),
+        "Invalid admin address: Generic error: Error decoding bech32",
+        "Expected 'Invalid admin address' error"
+    );
 }
 
 #[test]
