@@ -226,7 +226,7 @@ fn test_receive_nft_invalid_did() {
     assert!(result.is_err(), "Expected Err, but got Ok");
     assert_eq!(
         result.unwrap_err(),
-        ContractError::DidInvalid(did_contract::error::ContractError::DidFormatError())
+        ContractError::DidInvalid(did_contract::error::ContractError::DidFormatError("invalid_did".to_string()))
     );
 }
 

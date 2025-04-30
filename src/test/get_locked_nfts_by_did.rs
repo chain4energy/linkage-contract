@@ -217,6 +217,6 @@ fn test_get_locked_nfts_by_did_invalid_did() {
     assert!(result.is_err(), "Expected Err, but got Ok");
     assert_eq!(
         result.unwrap_err().to_string(),
-        "Generic error: Querier contract error: Did invalid: Did format error"
+        "Generic error: Querier contract error: Did invalid: Did format error: invalid_did_format"
     );
 }
