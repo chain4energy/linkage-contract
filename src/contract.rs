@@ -331,7 +331,7 @@ impl LinkageContract {
             .add_attribute("did", nft.did.clone())
             .add_event(event)
             .add_message(msg))
-            // .add_submessage(sub_msg))
+        // .add_submessage(sub_msg))
         //     }
         //     Err(e) => Err(ContractError::LinkageContractError(e)),
         // }
@@ -362,15 +362,18 @@ impl LinkageContract {
     ) -> Result<NftLockEntryResponse, ContractError> {
         self.ensure_valid_contract_addr(ctx.deps.api, &contract_address)?;
         self.ensure_token_id(&token_id)?;
-        let result = self.locked_nfts.may_load(
-            ctx.deps.storage,
-            (contract_address.clone(), token_id.clone()),
-        ).map_err(|e| {
-            ContractError::StorageError(
-                format!("Loading nft: {}:{}", contract_address, token_id),
-                e,
+        let result = self
+            .locked_nfts
+            .may_load(
+                ctx.deps.storage,
+                (contract_address.clone(), token_id.clone()),
             )
-        })?;
+            .map_err(|e| {
+                ContractError::StorageError(
+                    format!("Loading nft: {}:{}", contract_address, token_id),
+                    e,
+                )
+            })?;
         if result.is_none() {
             return Err(ContractError::NotFound(format!(
                 "NFT not found: {}:{}",
@@ -825,7 +828,9 @@ impl LinkageContract {
 
     fn authorize_admin(&self, deps: Deps, sender: &Addr) -> Result<(), ContractError> {
         if !self.is_admin(deps, sender)? {
-            return Err(ContractError::Unauthorized("Sender is not an admin".to_string()));
+            return Err(ContractError::Unauthorized(
+                "Sender is not an admin".to_string(),
+            ));
         }
         Ok(())
     }
@@ -863,14 +868,18 @@ impl LinkageContract {
 
     fn authorize_sender(&self, sender: &Addr, nft: &NftLockEntry) -> Result<(), ContractError> {
         if !self.is_sender(sender, nft) {
-            return Err(ContractError::Unauthorized("Sender is not the owner of the NFT".to_string()));
+            return Err(ContractError::Unauthorized(
+                "Sender is not the owner of the NFT".to_string(),
+            ));
         }
         Ok(())
     }
 
     fn authorize_contract(&self, deps: Deps, contract: &Addr) -> Result<(), ContractError> {
         if !self.is_authorized_contract(deps, contract)? {
-            return Err(ContractError::Unauthorized("Contract is not authorized".to_string()));
+            return Err(ContractError::Unauthorized(
+                "Contract is not authorized".to_string(),
+            ));
         }
         Ok(())
     }
@@ -956,7 +965,10 @@ impl LinkageContract {
         Ok(())
     }
 
-    fn ensure_authorized_contract_not_duplicated(&self, contracts: &Vec<Addr>) -> Result<(), ContractError> {
+    fn ensure_authorized_contract_not_duplicated(
+        &self,
+        contracts: &Vec<Addr>,
+    ) -> Result<(), ContractError> {
         let mut seen = HashSet::new();
         for contact in contracts {
             if !seen.insert(contact.to_string()) {
