@@ -337,20 +337,6 @@ impl LinkageContract {
         // }
     }
 
-    #[sv::msg(reply)] // TODO verify if needed
-    fn reply(
-        &self,
-        _ctx: ReplyCtx,
-        result: SubMsgResult,
-        #[sv::payload(raw)] payload: Binary,
-    ) -> Result<Response, ContractError> {
-        let response = to_json_string(&result)?;
-        Ok(Response::new()
-            .add_attribute("action", "Cw721base error response")
-            .add_attribute("result", response)
-            .add_attribute("payload", String::from_utf8(payload.to_vec()).unwrap()))
-    }
-
     // ------------ NFT Queries ------------
 
     #[sv::msg(query)]
@@ -399,7 +385,6 @@ impl LinkageContract {
         // }
     }
 
-    // TODO: test
     #[sv::msg(query)]
     pub fn get_locked_nfts_by_did(
         &self,
@@ -434,7 +419,6 @@ impl LinkageContract {
         Ok(result)
     }
 
-    // TODO: test
     #[sv::msg(query)]
     pub fn get_locked_nfts_by_owner(
         &self,
@@ -590,26 +574,6 @@ impl LinkageContract {
                     e,
                 )
             })?;
-
-        // match result {
-        //     Ok(result) => {
-        //         let nfts_vec = match result {
-        //             Some(mut nfts) => {
-        //                 nfts.push(nft.clone());
-        //                 nfts
-        //             }
-        //             None => {
-        //                 vec![nft.clone()]
-        //             }
-        //         };
-        //         let result = self.nfts_by_did.save(storage, entry.did.clone(), &nfts_vec);
-        //         if let Err(e) = result {
-        //             return Err(ContractError::LinkageContractError(e)); //  TODO specific error
-        //         }
-        //     }
-        //     Err(e) => return Err(ContractError::LinkageContractError(e)), //  TODO specific error
-        // }
-
         Ok(())
     }
 
@@ -737,14 +701,7 @@ impl LinkageContract {
                         e,
                     )
                 })?;
-            // if let Err(e) = result {
-            //     return Err(ContractError::LinkageContractError(e)); //  TODO specific error
-            // }
         }
-        //     }
-        //     Err(e) => return Err(ContractError::LinkageContractError(e)), //  TODO specific error
-        // }
-        // --------
         let result = self
             .nfts_by_did
             .may_load(storage, entry.did.clone())
@@ -765,23 +722,6 @@ impl LinkageContract {
             &token_id,
             "NFTs by did",
         )?;
-        // match result {
-        //     Ok(result) => {
-        //         let nfts_vec = match result {
-        //             Some(mut nfts) => {
-        //                 let pos = nfts.iter().position(|x| {
-        //                     x.token_id.eq(&token_id) && x.contract_address.eq(&contract_addr)
-        //                 });
-        //                 match pos {
-        //                     Some(pos) => nfts.remove(pos),
-        //                     None => return Err(ContractError::NotFound), //  TODO specific error
-        //                 };
-        //                 nfts
-        //             }
-        //             None => {
-        //                 return Err(ContractError::NotFound); //  TODO specific error
-        //             }
-        //         };
         if nfts_vec.is_empty() {
             self.nfts_by_did.remove(storage, entry.did.clone());
         } else {
@@ -797,13 +737,7 @@ impl LinkageContract {
                         e,
                     )
                 })?;
-            // if let Err(e) = result {
-            //     return Err(ContractError::LinkageContractError(e)); //  TODO specific error
-            // }
         }
-        //     }
-        //     Err(e) => return Err(ContractError::LinkageContractError(e)), //  TODO specific error
-        // }
 
         self.locked_nfts
             .remove(storage, (contract_addr.clone(), token_id.clone()));
@@ -812,7 +746,7 @@ impl LinkageContract {
     }
 
     fn is_admin(&self, deps: Deps, sender: &Addr) -> Result<bool, ContractError> {
-        let admins = self.admins.may_load(deps.storage); // TODO handle error
+        let admins = self.admins.may_load(deps.storage);
         match admins {
             Ok(admins) => {
                 if let Some(admin_list) = admins {
@@ -836,7 +770,7 @@ impl LinkageContract {
     }
 
     fn is_authorized_contract(&self, deps: Deps, contract: &Addr) -> Result<bool, ContractError> {
-        let authorized_nft_contracts = self.authorized_nft_contracts.may_load(deps.storage); // TODO handle error
+        let authorized_nft_contracts = self.authorized_nft_contracts.may_load(deps.storage);
         match authorized_nft_contracts {
             Ok(admins) => {
                 if let Some(admin_list) = admins {
