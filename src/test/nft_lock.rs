@@ -138,40 +138,27 @@ fn test_receive_nft_success() {
     assert!(result.is_ok(), "Expected Ok, but got Err");
     let res = result.unwrap();
 
-    assert_eq!(res.events.len(), 3);
+    assert_eq!(res.events.len(), 2);
 
     // Verify event attributes
     assert_eq!(res.events[0].ty, "execute");
     assert_eq!(res.events[0].attributes[0].key, "_contract_address");
     assert_eq!(res.events[0].attributes[0].value, "cosmwasm1mzdhwvvh22wrt07w59wxyd58822qavwkx5lcej7aqfkpqqlhaqfsgn6fq2");
     assert_eq!(res.events[0].attributes.len(), 1);
- 
-    assert_eq!(res.events[1].ty, "wasm");
+    
+    assert_eq!(res.events[1].ty, "wasm-receive_nft");
     assert_eq!(res.events[1].attributes[0].key, "_contract_address");
     assert_eq!(res.events[1].attributes[0].value, "cosmwasm1mzdhwvvh22wrt07w59wxyd58822qavwkx5lcej7aqfkpqqlhaqfsgn6fq2");
-    assert_eq!(res.events[1].attributes[1].key, "action");
-    assert_eq!(res.events[1].attributes[1].value, "receive_nft");
+    assert_eq!(res.events[1].attributes[1].key, "executor");
+    assert_eq!(res.events[1].attributes[1].value, auth_address.as_str());
     assert_eq!(res.events[1].attributes[2].key, "sender");
     assert_eq!(res.events[1].attributes[2].value, sender.to_string());
+
     assert_eq!(res.events[1].attributes[3].key, "token_id");
     assert_eq!(res.events[1].attributes[3].value, token_id);
     assert_eq!(res.events[1].attributes[4].key, "did");
     assert_eq!(res.events[1].attributes[4].value, did);
     assert_eq!(res.events[1].attributes.len(), 5);
-    
-    assert_eq!(res.events[2].ty, "wasm-receive_nft");
-    assert_eq!(res.events[2].attributes[0].key, "_contract_address");
-    assert_eq!(res.events[2].attributes[0].value, "cosmwasm1mzdhwvvh22wrt07w59wxyd58822qavwkx5lcej7aqfkpqqlhaqfsgn6fq2");
-    assert_eq!(res.events[2].attributes[1].key, "executor");
-    assert_eq!(res.events[2].attributes[1].value, auth_address.as_str());
-    assert_eq!(res.events[2].attributes[2].key, "sender");
-    assert_eq!(res.events[2].attributes[2].value, sender.to_string());
-
-    assert_eq!(res.events[2].attributes[3].key, "token_id");
-    assert_eq!(res.events[2].attributes[3].value, token_id);
-    assert_eq!(res.events[2].attributes[4].key, "did");
-    assert_eq!(res.events[2].attributes[4].value, did);
-    assert_eq!(res.events[2].attributes.len(), 5);
 
 }
 

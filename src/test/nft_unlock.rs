@@ -138,46 +138,31 @@ fn test_unlock_nft_success() {
 
     let res = result.unwrap();
 
-    assert_eq!(res.events.len(), 4);
+    assert_eq!(res.events.len(), 3);
     // Verify event attributes
     assert_eq!(res.events[0].ty, "execute");
     assert_eq!(res.events[0].attributes[0].key, "_contract_address");
     assert_eq!(res.events[0].attributes[0].value, "cosmwasm14hj2tavq8fpesdwxxcu44rty3hh90vhujrvcmstl4zr3txmfvw9s8jef58");
     assert_eq!(res.events[0].attributes.len(), 1);
 
-    assert_eq!(res.events[1].ty, "wasm");
+    assert_eq!(res.events[1].ty, "wasm-unlock_nft");
     assert_eq!(res.events[1].attributes[0].key, "_contract_address");
     assert_eq!(res.events[1].attributes[0].value, "cosmwasm14hj2tavq8fpesdwxxcu44rty3hh90vhujrvcmstl4zr3txmfvw9s8jef58");
-    assert_eq!(res.events[1].attributes[1].key, "action");
-    assert_eq!(res.events[1].attributes[1].value, "unlock_nft");
+    assert_eq!(res.events[1].attributes[1].key, "executor");
+    assert_eq!(res.events[1].attributes[1].value, sender.to_string());
     assert_eq!(res.events[1].attributes[2].key, "contract_address");
     assert_eq!(res.events[1].attributes[2].value, cw721_base_contract_addr.to_string());
-//  assert_eq!(res.events[1].attributes[2].key, "sender");
-//  assert_eq!(res.events[1].attributes[2].value, sender.to_string());
     assert_eq!(res.events[1].attributes[3].key, "token_id");
     assert_eq!(res.events[1].attributes[3].value, token_id);
     assert_eq!(res.events[1].attributes[4].key, "did");
     assert_eq!(res.events[1].attributes[4].value, did);
     assert_eq!(res.events[1].attributes.len(), 5);
-    
-    assert_eq!(res.events[2].ty, "wasm-unlock_nft");
+
+    assert_eq!(res.events[2].ty, "execute");
     assert_eq!(res.events[2].attributes[0].key, "_contract_address");
-    assert_eq!(res.events[2].attributes[0].value, "cosmwasm14hj2tavq8fpesdwxxcu44rty3hh90vhujrvcmstl4zr3txmfvw9s8jef58");
-    assert_eq!(res.events[2].attributes[1].key, "executor");
-    assert_eq!(res.events[2].attributes[1].value, sender.to_string());
-    assert_eq!(res.events[1].attributes[2].key, "contract_address");
-    assert_eq!(res.events[1].attributes[2].value, cw721_base_contract_addr.to_string());
-    assert_eq!(res.events[2].attributes[3].key, "token_id");
-    assert_eq!(res.events[2].attributes[3].value, token_id);
-    assert_eq!(res.events[2].attributes[4].key, "did");
-    assert_eq!(res.events[2].attributes[4].value, did);
-    assert_eq!(res.events[2].attributes.len(), 5);
+    assert_eq!(res.events[2].attributes[0].value,  cw721_base_contract_addr.to_string());
 
-    assert_eq!(res.events[3].ty, "execute");
-    assert_eq!(res.events[3].attributes[0].key, "_contract_address");
-    assert_eq!(res.events[3].attributes[0].value,  cw721_base_contract_addr.to_string());
-
-    assert_eq!(res.events[3].attributes.len(), 1);
+    assert_eq!(res.events[2].attributes.len(), 1);
 
     // Verify the NFT is no longer locked
     let result = contract.get_locked_nft(cw721_base_contract_addr.clone(), token_id.clone());

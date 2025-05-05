@@ -4,14 +4,14 @@ use crate::error::ContractError;
 use crate::responses::NftLockEntryResponse;
 use crate::state::{Nft, NftLockEntry};
 use cosmwasm_std::{
-    to_json_binary, to_json_string, Addr, Api, Binary, Deps, Event, Response, Storage,
-    SubMsgResult, WasmMsg,
+    to_json_binary, Addr, Api, Binary, Deps, Event, Response, Storage,
+     WasmMsg,
 };
 use cw_storage_plus::{Item, Map};
 use did_contract::state::Did;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use sylvia::ctx::{ExecCtx, InstantiateCtx, QueryCtx, ReplyCtx};
+use sylvia::ctx::{ExecCtx, InstantiateCtx, QueryCtx};
 use sylvia::{contract, entry_points};
 
 pub struct LinkageContract {
@@ -159,13 +159,7 @@ impl LinkageContract {
                 nft_contract_address.to_string(),
             );
 
-        Ok(Response::new()
-            .add_attribute("action", "add_authorized_nft_contract")
-            .add_attribute(
-                "new_authorized_nft_contract",
-                nft_contract_address.to_string(),
-            )
-            .add_event(event))
+        Ok(Response::new().add_event(event))
     }
 
     #[sv::msg(exec)]
@@ -197,13 +191,7 @@ impl LinkageContract {
                 nft_contract_address.to_string(),
             );
 
-        Ok(Response::new()
-            .add_attribute("action", "remove_authorized_nft_contract")
-            .add_attribute(
-                "removed_authorized_nft_contract",
-                nft_contract_address.to_string(),
-            )
-            .add_event(event))
+        Ok(Response::new().add_event(event))
     }
 
     #[sv::msg(query)]
@@ -247,12 +235,7 @@ impl LinkageContract {
             .add_attribute("token_id", token_id.clone())
             .add_attribute("did", did.clone());
 
-        Ok(Response::new()
-            .add_attribute("action", "receive_nft")
-            .add_attribute("sender", sender.as_str())
-            .add_attribute("token_id", token_id)
-            .add_attribute("did", did)
-            .add_event(event))
+        Ok(Response::new().add_event(event))
     }
 
     #[sv::msg(exec)]
@@ -325,10 +308,6 @@ impl LinkageContract {
             .add_attribute("did", nft.did.clone());
 
         Ok(Response::new()
-            .add_attribute("action", "unlock_nft")
-            .add_attribute("contract_address", contract_address.as_str())
-            .add_attribute("token_id", token_id.clone())
-            .add_attribute("did", nft.did.clone())
             .add_event(event)
             .add_message(msg))
         // .add_submessage(sub_msg))

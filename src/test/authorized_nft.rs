@@ -31,40 +31,20 @@ fn test_add_authorized_nft_contract() {
         contract.contract_addr.to_string()
     );
 
-    assert_eq!(res.events[1].ty, "wasm");
+    assert_eq!(res.events[1].ty, "wasm-add_authorized_nft_contract");
     assert_eq!(res.events[1].attributes[0].key, "_contract_address");
     assert_eq!(
         res.events[1].attributes[0].value,
         contract.contract_addr.to_string()
     );
-    assert_eq!(res.events[1].attributes[1].key, "action");
-    assert_eq!(
-        res.events[1].attributes[1].value,
-        "add_authorized_nft_contract"
-    );
+    assert_eq!(res.events[1].attributes[1].key, "executor");
+    assert_eq!(res.events[1].attributes[1].value, owner.to_string());
     assert_eq!(
         res.events[1].attributes[2].key,
         "new_authorized_nft_contract"
     );
     assert_eq!(
         res.events[1].attributes[2].value,
-        new_nft_contract.to_string()
-    );
-
-    assert_eq!(res.events[2].ty, "wasm-add_authorized_nft_contract");
-    assert_eq!(res.events[2].attributes[0].key, "_contract_address");
-    assert_eq!(
-        res.events[2].attributes[0].value,
-        contract.contract_addr.to_string()
-    );
-    assert_eq!(res.events[2].attributes[1].key, "executor");
-    assert_eq!(res.events[2].attributes[1].value, owner.to_string());
-    assert_eq!(
-        res.events[2].attributes[2].key,
-        "new_authorized_nft_contract"
-    );
-    assert_eq!(
-        res.events[2].attributes[2].value,
         new_nft_contract.to_string()
     );
 
@@ -227,11 +207,11 @@ fn test_remove_authorized_nft_contract() {
     // Verify emitted events
     let res = res.unwrap();
     assert_eq!(res.events[0].ty, "execute");
-    assert_eq!(res.events[1].ty, "wasm");
-    assert_eq!(res.events[1].attributes[1].key, "action");
+    assert_eq!(res.events[1].ty, "wasm-remove_authorized_nft_contract");
+    assert_eq!(res.events[1].attributes[1].key, "executor");
     assert_eq!(
         res.events[1].attributes[1].value,
-        "remove_authorized_nft_contract"
+        owner.to_string()
     );
     assert_eq!(
         res.events[1].attributes[2].key,
